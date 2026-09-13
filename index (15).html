@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deriv Higher/Lower Simultaneous Bot</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --border: #2a323c;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --buy: #26a969;
+    --sell: #d9534f;
+    --accent: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+  }
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 14px 0;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .field {
+    flex: 1;
+    min-width: 140px;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  input, select {
+    width: 100%;
+    padding: 9px 10px;
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+  }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.88; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-connect { background: var(--accent); color: white; }
+  .btn-fire { background: var(--buy); color: white; }
+  .btn-stop { background: var(--sell); color: white; }
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sell);
+  }
+  .dot.connected { background: var(--buy); }
+  .actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .log {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    height: 260px;
+    overflow-y: auto;
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  .log-entry { margin-bottom: 2px; }
+  .log-buy { color: var(--buy); }
+  .log-sell { color: var(--sell); }
+  .log-info { color: var(--muted); }
+  .log-error { color: #f59e0b; }
+  .trigger-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .toggle-btn {
+    flex: 1;
+    padding: 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #0d1117;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .toggle-btn.active {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(59,130,246,0.12);
+  }
+  .warning {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    padding: 10px;
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Higher / Lower Simultaneous Bot</h1>
+  <div class="subtitle">Fires a matched Rise + Fall trade on the same tick</div>
+
+  <div class="panel">
+    <h2>Connection</h2>
+    <div id="loginPrompt">
+      <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()">Log in with Deriv</button>
+    </div>
+    <div id="accountPicker" style="display:none; margin-top: 12px;">
+      <label style="margin-bottom: 8px;">Select account to trade with</label>
+      <div id="accountList" style="margin-bottom: 12px;"></div>
+    </div>
+    <div class="status-bar" style="margin-top: 12px;">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText">Disconnected</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Trade Settings</h2>
+    <div class="row">
+      <div class="field">
+        <label>Symbol</label>
+        <select id="symbol">
+          <option value="R_10">Volatility 10 Index</option>
+          <option value="R_25">Volatility 25 Index</option>
+          <option value="R_50">Volatility 50 Index</option>
+          <option value="R_75" selected>Volatility 75 Index</option>
+          <option value="R_100">Volatility 100 Index</option>
+          <option value="1HZ10V">Volatility 10 (1s) Index</option>
+          <option value="1HZ100V">Volatility 100 (1s) Index</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Buy Stake (USD)</label>
+        <input type="number" id="buyStake" value="2" min="0.35" step="0.01">
+      </div>
+      <div class="field">
+        <label>Sell Stake (USD)</label>
+        <input type="number" id="sellStake" value="2" min="0.35" step="0.01">
+      </div>
+      <div class="field">
+        <label>Duration (ticks)</label>
+        <input type="number" id="duration" value="10" min="1" step="1">
+      </div>
+    </div>
+
+    <label style="margin-bottom: 8px;">Trigger Mode</label>
+    <div class="trigger-toggle">
+      <div class="toggle-btn active" id="modeManual" onclick="setMode('manual')">Manual (fire on click)</div>
+      <div class="toggle-btn" id="modeAuto" onclick="setMode('auto')">Auto (fire on every new tick)</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-fire" id="fireBtn" onclick="fireTrade()" disabled>Fire Trade Now</button>
+      <button class="btn btn-stop" id="autoStopBtn" onclick="stopAuto()" style="display:none;">Stop Auto-Firing</button>
+    </div>
+
+    <div class="warning">
+      Duration is set in ticks, so actual time depends on the symbol's tick speed. Auto mode fires a new Buy+Sell pair every time a new tick arrives — use with care, as this can place trades continuously.
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Activity Log</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+let ws = null;
+let isConnected = false;
+let mode = 'manual';
+let autoFiring = false;
+let currentSymbol = null;
+let tickSubscriptionId = null;
+
+const APP_ID = '34nCrhkce6S7N2Yy987vr'; // Kimaro's registered Deriv app_id
+const REDIRECT_URI = 'https://mentorculture1-oss.github.io/Kimaro_bot/';
+
+// Kick off Deriv's OAuth login. Deriv handles the login/consent screen itself,
+// then redirects back to REDIRECT_URI with account/token pairs as URL params.
+function loginWithDeriv() {
+  window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=' + APP_ID;
+}
+
+// Parses acct1/token1/cur1, acct2/token2/cur2, ... from the redirect URL
+// that Deriv sends the user back to after a successful OAuth login.
+function parseOAuthRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const accounts = [];
+  let i = 1;
+  while (params.has('acct' + i)) {
+    accounts.push({
+      loginid: params.get('acct' + i),
+      token: params.get('token' + i),
+      currency: params.get('cur' + i)
+    });
+    i++;
+  }
+  return accounts;
+}
+
+function showAccountPicker(accounts) {
+  document.getElementById('loginPrompt').style.display = 'none';
+  const picker = document.getElementById('accountPicker');
+  const list = document.getElementById('accountList');
+  list.innerHTML = '';
+  accounts.forEach((acc, idx) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:8px;';
+    row.innerHTML =
+      '<button class="btn btn-connect" style="padding:7px 14px;" onclick="connectWithAccount(' + idx + ')">Use</button>' +
+      '<span>' + acc.loginid + ' (' + acc.currency + ')</span>';
+    list.appendChild(row);
+  });
+  picker.style.display = 'block';
+  log('Logged in via Deriv. Choose which account to trade with.', 'info');
+}
+
+let oauthAccounts = [];
+
+function connectWithAccount(idx) {
+  const acc = oauthAccounts[idx];
+  connect(acc.token, acc.loginid);
+}
+
+function log(message, type = 'info') {
+  const logEl = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry log-' + type;
+  const time = new Date().toLocaleTimeString();
+  entry.textContent = '[' + time + '] ' + message;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(connected, text) {
+  isConnected = connected;
+  document.getElementById('statusDot').classList.toggle('connected', connected);
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('fireBtn').disabled = !connected;
+}
+
+function setMode(newMode) {
+  mode = newMode;
+  document.getElementById('modeManual').classList.toggle('active', mode === 'manual');
+  document.getElementById('modeAuto').classList.toggle('active', mode === 'auto');
+  document.getElementById('fireBtn').style.display = mode === 'manual' ? 'inline-block' : 'none';
+  document.getElementById('autoStopBtn').style.display = 'none';
+  if (mode === 'manual' && autoFiring) {
+    stopAuto();
+  }
+}
+
+function connect(token, loginid) {
+  if (!token) {
+    log('No account token available. Please log in with Deriv first.', 'error');
+    return;
+  }
+
+  setStatus(false, 'Connecting as ' + loginid + '...');
+  ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=' + APP_ID);
+
+  ws.onopen = () => {
+    log('WebSocket connected. Authorizing...');
+    ws.send(JSON.stringify({ authorize: token }));
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    handleMessage(data);
+  };
+
+  ws.onerror = (err) => {
+    log('WebSocket error. Check your token and connection.', 'error');
+    setStatus(false, 'Error');
+  };
+
+  ws.onclose = () => {
+    log('Connection closed.', 'info');
+    setStatus(false, 'Disconnected');
+  };
+}
+
+function handleMessage(data) {
+  if (data.error) {
+    log('API error: ' + data.error.message, 'error');
+    return;
+  }
+
+  switch (data.msg_type) {
+    case 'authorize':
+      log('Authorized as ' + data.authorize.loginid + '.', 'info');
+      setStatus(true, 'Connected — ' + data.authorize.loginid);
+      break;
+
+    case 'buy':
+      const contractType = data.echo_req.parameters.contract_type;
+      const cls = contractType === 'CALL' ? 'buy' : 'sell';
+      log((contractType === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
+          ' placed — contract ' + data.buy.contract_id + ', buy price ' + data.buy.buy_price, cls);
+      break;
+
+    case 'tick':
+      if (mode === 'auto' && autoFiring) {
+        sendTradePair(data.tick.quote);
+      }
+      break;
+
+    case 'forget':
+      break;
+
+    default:
+      break;
+  }
+}
+
+function subscribeToTicks(symbol) {
+  ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+  currentSymbol = symbol;
+}
+
+function unsubscribeTicks() {
+  if (currentSymbol) {
+    ws.send(JSON.stringify({ forget_all: 'ticks' }));
+  }
+}
+
+function buildBuyRequest(contractType, stake, symbol, duration) {
+  return {
+    buy: 1,
+    price: stake,
+    parameters: {
+      amount: stake,
+      basis: 'stake',
+      contract_type: contractType,
+      currency: 'USD',
+      duration: duration,
+      duration_unit: 't',
+      symbol: symbol
+    }
+  };
+}
+
+function sendTradePair(referencePrice) {
+  const symbol = document.getElementById('symbol').value;
+  const buyStake = parseFloat(document.getElementById('buyStake').value);
+  const sellStake = parseFloat(document.getElementById('sellStake').value);
+  const duration = parseInt(document.getElementById('duration').value, 10);
+
+  if (!isConnected) {
+    log('Not connected.', 'error');
+    return;
+  }
+
+  const higherReq = buildBuyRequest('CALL', buyStake, symbol, duration);
+  const lowerReq = buildBuyRequest('PUT', sellStake, symbol, duration);
+
+  // Fire both immediately, back-to-back, without waiting on either response,
+  // so both orders go out while the current tick/price is still fresh.
+  ws.send(JSON.stringify(higherReq));
+  ws.send(JSON.stringify(lowerReq));
+
+  log('Fired pair at reference price ' + referencePrice + ' — Buy $' + buyStake + ' / Sell $' + sellStake + ', duration ' + duration + ' ticks.', 'info');
+}
+
+function fireTrade() {
+  const symbol = document.getElementById('symbol').value;
+  // For manual mode, request a single current tick as the reference, then fire.
+  ws.send(JSON.stringify({ ticks: symbol }));
+  const handler = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.msg_type === 'tick') {
+      sendTradePair(data.tick.quote);
+      ws.removeEventListener('message', handler);
+    }
+  };
+  ws.addEventListener('message', handler);
+}
+
+function startAutoOnSymbol() {
+  const symbol = document.getElementById('symbol').value;
+  subscribeToTicks(symbol);
+  autoFiring = true;
+  document.getElementById('autoStopBtn').style.display = 'inline-block';
+  log('Auto-firing enabled on ' + symbol + '. A new pair fires on every tick.', 'info');
+}
+
+function stopAuto() {
+  autoFiring = false;
+  unsubscribeTicks();
+  document.getElementById('autoStopBtn').style.display = 'none';
+  log('Auto-firing stopped.', 'info');
+}
+
+// Wire up auto mode start when toggled
+document.getElementById('modeAuto').addEventListener('click', () => {
+  if (isConnected) startAutoOnSymbol();
+});
+
+// On load, check if we've just been redirected back from Deriv's OAuth login.
+window.addEventListener('DOMContentLoaded', () => {
+  const accounts = parseOAuthRedirect();
+  if (accounts.length > 0) {
+    oauthAccounts = accounts;
+    // Clean the token params out of the visible URL/history for safety.
+    window.history.replaceState({}, document.title, REDIRECT_URI);
+    showAccountPicker(accounts);
+  }
+});
+</script>
+</body>
+</html>

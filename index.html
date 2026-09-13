@@ -415,10 +415,6 @@ function setMode(newMode) {
 }
 
 // ---------------- Account classifier ----------------
-// Deriv has used several account-id prefixes over time:
-//   Demo (virtual):  VRTC (legacy), DOT (current)
-//   Real:            CR (legacy), ROT (current), MF/ML (some regions)
-// Also, the response often includes a `group` or `account_type` field we can trust.
 function accountIsDemo(a) {
   const grp = String(a.group || a.account_type || a.type || '').toLowerCase();
   if (grp.includes('demo') || grp.includes('virtual')) return true;
@@ -471,11 +467,8 @@ async function connect() {
     }
 
     const wantDemo = accountType === 'demo';
-
-    // Primary: use classifier
     let chosen = accounts.find(a => accountIsDemo(a) === wantDemo);
 
-    // Fallback: if classifier returned null for everything, use the first account
     if (!chosen) {
       log('Could not classify accounts — using the first one.', 'error');
       chosen = accounts[0];
@@ -493,7 +486,6 @@ async function connect() {
     const classified = accountIsDemo(chosen);
     log(`Selected ${classified === true ? 'DEMO' : classified === false ? 'REAL' : 'UNKNOWN'} account: ${accountId}`, 'info');
 
-    // Request OTP
     setStatus(false, 'Requesting session...');
     const otpResp = await fetch(`${API_BASE}/trading/v1/options/accounts/${accountId}/otp`, {
       method: 'POST',
@@ -566,7 +558,7 @@ function handleMessage(data) {
 
     case 'buy': {
       try {
-        const ct = data.echo_req?.parameters?.contract_type || 'UNKNOWN';
+        const ct = data.echo_req?.parameters?.contract_type || data.echo_req?.contract_type || 'UNKNOWN';
         const cls = ct === 'CALL' ? 'buy' : 'sell';
         log((ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
             ' placed — contract ' + data.buy.contract_id +
@@ -576,6 +568,10 @@ function handleMessage(data) {
       }
       break;
     }
+
+    case 'proposal':
+      // Not currently used, but reserved in case we switch to the two-step flow
+      break;
 
     case 'tick':
       if (mode === 'auto' && autoFiring) {
@@ -602,6 +598,8 @@ function unsubscribeTicks() {
 }
 
 // ---------------- Trade logic ----------------
+// NOTE: The current Deriv options API uses `underlying_symbol`
+// (not `symbol`) inside the buy parameters block.
 function buildBuyRequest(contractType, stake, symbol, duration) {
   return {
     buy: 1,
@@ -613,7 +611,7 @@ function buildBuyRequest(contractType, stake, symbol, duration) {
       currency: 'USD',
       duration: duration,
       duration_unit: 't',
-      symbol: symbol
+      underlying_symbol: symbol
     }
   };
 }

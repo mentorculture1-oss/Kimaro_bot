@@ -41,6 +41,23 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .panel-header h2 { margin: 0; }
+  .btn-mini {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #0d1117;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-mini:hover { color: var(--text); border-color: var(--accent); }
   .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
   .field { flex: 1; min-width: 140px; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
@@ -88,7 +105,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;
-    height: 260px;
+    height: 300px;
     overflow-y: auto;
     font-family: ui-monospace, 'SF Mono', Consolas, monospace;
     font-size: 12.5px;
@@ -100,6 +117,8 @@
   .log-info { color: var(--muted); }
   .log-error { color: #f59e0b; }
   .log-balance { color: #3b82f6; font-weight: 600; }
+  .log-win { color: #26a969; font-weight: 700; }
+  .log-loss { color: #d9534f; font-weight: 700; }
   .trigger-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
   .toggle-btn {
     flex: 1;
@@ -139,11 +158,7 @@
     text-align: center;
   }
   .danger-banner.show { display: block; }
-  .acct-selector {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
+  .acct-selector { display: flex; gap: 8px; margin-bottom: 10px; }
   .acct-btn {
     flex: 1;
     padding: 10px;
@@ -167,6 +182,37 @@
     background: rgba(217,83,79,0.15);
     color: #ff8b87;
   }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .stat-label {
+    font-size: 10.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: ui-monospace, monospace;
+    color: var(--text);
+  }
+  .stat-value.win { color: var(--buy); }
+  .stat-value.loss { color: var(--sell); }
+  .stat-value.neutral { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -251,7 +297,35 @@
   </div>
 
   <div class="panel">
-    <h2>Activity Log</h2>
+    <div class="panel-header">
+      <h2>Session Stats</h2>
+      <button class="btn-mini" onclick="resetStats()">Reset Stats</button>
+    </div>
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-label">Trades</div>
+        <div class="stat-value" id="statTotal">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Wins</div>
+        <div class="stat-value win" id="statWins">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Losses</div>
+        <div class="stat-value loss" id="statLosses">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Net P&L</div>
+        <div class="stat-value neutral" id="statPnL">0.00</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Activity Log</h2>
+      <button class="btn-mini" onclick="clearLog()">Clear Log</button>
+    </div>
     <div class="log" id="log"></div>
   </div>
 </div>
@@ -264,6 +338,12 @@ let autoFiring = false;
 let currentSymbol = null;
 let accountType = 'demo';   // 'demo' | 'real'
 let connectedAccountId = null;
+
+// Session stats
+const stats = { total: 0, wins: 0, losses: 0, pnl: 0 };
+
+// Map of contract_id -> metadata about the trade we placed (buy or sell)
+const pendingContracts = {};
 
 const APP_ID = '34nCrhkce6S7N2Yy987vr';
 const OAUTH_AUTHORIZE_URL = 'https://auth.deriv.com/oauth2/auth';
@@ -282,6 +362,61 @@ function setAccountType(type) {
   document.getElementById('acctReal').classList.toggle('active', type === 'real');
   document.getElementById('dangerBanner').classList.toggle('show', type === 'real');
   log('Account type set to ' + (type === 'demo' ? 'DEMO (virtual)' : 'REAL (live money)'), 'info');
+}
+
+// ---------------- Log / stats helpers ----------------
+function log(message, type = 'info') {
+  const logEl = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry log-' + type;
+  const time = new Date().toLocaleTimeString();
+  entry.textContent = '[' + time + '] ' + message;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+  log('Activity log cleared.', 'info');
+}
+
+function resetStats() {
+  stats.total = 0;
+  stats.wins = 0;
+  stats.losses = 0;
+  stats.pnl = 0;
+  refreshStatsUI();
+  log('Session stats reset.', 'info');
+}
+
+function refreshStatsUI() {
+  document.getElementById('statTotal').textContent = stats.total;
+  document.getElementById('statWins').textContent = stats.wins;
+  document.getElementById('statLosses').textContent = stats.losses;
+  const pnlEl = document.getElementById('statPnL');
+  pnlEl.textContent = (stats.pnl >= 0 ? '+' : '') + stats.pnl.toFixed(2);
+  pnlEl.classList.remove('win', 'loss', 'neutral');
+  pnlEl.classList.add(stats.pnl > 0 ? 'win' : stats.pnl < 0 ? 'loss' : 'neutral');
+}
+
+function recordResult(profit, contractId, contractType, stake) {
+  stats.total += 1;
+  if (profit > 0) stats.wins += 1;
+  else stats.losses += 1;
+  stats.pnl += profit;
+  refreshStatsUI();
+
+  const tag = accountType === 'real' ? '[REAL]' : '[DEMO]';
+  const label = contractType === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)';
+  const outcome = profit > 0 ? 'WON' : 'LOST';
+  const typeClass = profit > 0 ? 'win' : 'loss';
+
+  log(
+    `${outcome} ${tag} ${label} — contract ${contractId}, stake $${stake.toFixed(2)}, ` +
+    `profit ${profit >= 0 ? '+' : ''}${profit.toFixed(2)} | ` +
+    `Session: ${stats.total} trades, ${stats.wins}W/${stats.losses}L, P&L ${stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}`,
+    typeClass
+  );
 }
 
 // ---------------- PKCE helpers ----------------
@@ -381,17 +516,6 @@ function checkOauthReturn() {
   }
 }
 
-// ---------------- Logging ----------------
-function log(message, type = 'info') {
-  const logEl = document.getElementById('log');
-  const entry = document.createElement('div');
-  entry.className = 'log-entry log-' + type;
-  const time = new Date().toLocaleTimeString();
-  entry.textContent = '[' + time + '] ' + message;
-  logEl.appendChild(entry);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
 function setStatus(connected, text) {
   isConnected = connected;
   document.getElementById('statusDot').classList.toggle('connected', connected);
@@ -419,7 +543,6 @@ function accountIsDemo(a) {
   const grp = String(a.group || a.account_type || a.type || '').toLowerCase();
   if (grp.includes('demo') || grp.includes('virtual')) return true;
   if (grp.includes('real')) return false;
-
   const id = String(a.account_id || a.id || a.loginid || '').toUpperCase();
   const demoPrefixes = ['VRTC', 'DOT', 'VRT'];
   const realPrefixes = ['CR', 'ROT', 'MF', 'ML'];
@@ -468,11 +591,7 @@ async function connect() {
 
     const wantDemo = accountType === 'demo';
     let chosen = accounts.find(a => accountIsDemo(a) === wantDemo);
-
-    if (!chosen) {
-      log('Could not classify accounts — using the first one.', 'error');
-      chosen = accounts[0];
-    }
+    if (!chosen) chosen = accounts[0];
 
     const accountId = chosen.account_id || chosen.id || chosen.loginid;
     if (!accountId) {
@@ -499,7 +618,6 @@ async function connect() {
     }
 
     const wsEndpoint = otpData.data.url.split('?')[0];
-    console.log('Connecting to WS endpoint:', wsEndpoint);
     log('WebSocket endpoint: ' + wsEndpoint, 'info');
 
     setStatus(false, 'Connecting...');
@@ -547,31 +665,59 @@ function handleMessage(data) {
       const b = data.balance || data;
       if (b && b.balance !== undefined) {
         updateBalanceDisplay(b.balance, b.currency || 'USD');
-        log(`Balance: ${Number(b.balance).toFixed(2)} ${b.currency || 'USD'}`, 'balance');
       }
       break;
     }
-
-    case 'authorize':
-      log('Authorized as ' + data.authorize.loginid + '.', 'info');
-      break;
 
     case 'buy': {
       try {
-        const ct = data.echo_req?.parameters?.contract_type || data.echo_req?.contract_type || 'UNKNOWN';
+        const contractId = data.buy.contract_id;
+        const buyPrice = parseFloat(data.buy.buy_price);
+        const meta = pendingContracts[contractId] || {};
+        const ct = meta.contractType || 'CALL';
         const cls = ct === 'CALL' ? 'buy' : 'sell';
         log((ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
-            ' placed — contract ' + data.buy.contract_id +
-            ', buy price ' + data.buy.buy_price, cls);
+            ' placed — contract ' + contractId +
+            ', buy price ' + buyPrice, cls);
+
+        // Subscribe to this contract to receive the win/loss result
+        ws.send(JSON.stringify({
+          proposal_open_contract: 1,
+          contract_id: contractId,
+          subscribe: 1
+        }));
       } catch (e) {
-        log('Buy response received (unparsed).', 'info');
+        console.error('Buy parse error:', e, data);
       }
       break;
     }
 
-    case 'proposal':
-      // Not currently used, but reserved in case we switch to the two-step flow
+    case 'proposal_open_contract': {
+      const c = data.proposal_open_contract;
+      if (!c) break;
+
+      // We only care once the contract has been sold (settled)
+      if (c.is_sold) {
+        const cid = c.contract_id;
+        const meta = pendingContracts[cid] || {};
+
+        // Guard against duplicate logs — remove from pending so we only record once
+        if (meta.recorded) break;
+        meta.recorded = true;
+
+        const profit = parseFloat(c.profit);
+        const ct = meta.contractType || c.contract_type || 'CALL';
+        const stake = meta.stake || parseFloat(c.buy_price) || 0;
+
+        recordResult(profit, cid, ct, stake);
+
+        // Unsubscribe from this contract now that it's settled
+        ws.send(JSON.stringify({
+          forget: data.proposal_open_contract.id
+        }));
+      }
       break;
+    }
 
     case 'tick':
       if (mode === 'auto' && autoFiring) {
@@ -583,7 +729,6 @@ function handleMessage(data) {
       break;
 
     default:
-      // console.log('Unhandled msg:', data);
       break;
   }
 }
@@ -598,8 +743,6 @@ function unsubscribeTicks() {
 }
 
 // ---------------- Trade logic ----------------
-// NOTE: The current Deriv options API uses `underlying_symbol`
-// (not `symbol`) inside the buy parameters block.
 function buildBuyRequest(contractType, stake, symbol, duration) {
   return {
     buy: 1,
@@ -627,6 +770,11 @@ function sendTradePair(referencePrice) {
   const higherReq = buildBuyRequest('CALL', buyStake, symbol, duration);
   const lowerReq  = buildBuyRequest('PUT',  sellStake, symbol, duration);
 
+  // Mark this tick as the anchor so the buy handler can find metadata later.
+  // We stash "next pair metadata" and the buy responses will attach to it in order.
+  pendingPairMeta.push({ contractType: 'CALL', stake: buyStake });
+  pendingPairMeta.push({ contractType: 'PUT',  stake: sellStake });
+
   ws.send(JSON.stringify(higherReq));
   ws.send(JSON.stringify(lowerReq));
 
@@ -635,6 +783,26 @@ function sendTradePair(referencePrice) {
       ' — Buy $' + buyStake + ' / Sell $' + sellStake +
       ', duration ' + duration + ' ticks.', 'info');
 }
+
+// Queue of metadata for the next buy responses, in order
+const pendingPairMeta = [];
+
+// Patch buy handler to attach metadata when buy response arrives.
+// We re-wrap handleMessage to intercept 'buy' cleanly here.
+const _originalHandleMessage = handleMessage;
+handleMessage = function (data) {
+  if (data && data.msg_type === 'buy' && data.buy && data.buy.contract_id) {
+    const meta = pendingPairMeta.shift();
+    if (meta) {
+      pendingContracts[data.buy.contract_id] = {
+        contractType: meta.contractType,
+        stake: meta.stake,
+        recorded: false
+      };
+    }
+  }
+  _originalHandleMessage(data);
+};
 
 function fireTrade() {
   if (!isConnected) return;

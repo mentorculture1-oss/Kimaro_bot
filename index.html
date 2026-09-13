@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deriv Higher/Lower Bot</title>
+<title>Deriv Higher/Lower Simultaneous Bot</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -23,7 +23,7 @@
     color: var(--text);
     padding: 20px;
   }
-  .container { max-width: 760px; margin: 0 auto; }
+  .container { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px 0; }
   .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
   .panel {
@@ -41,7 +41,12 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
   .panel-header h2 { margin: 0; }
   .btn-mini {
     padding: 5px 12px;
@@ -80,8 +85,6 @@
   .btn-connect { background: var(--accent); color: white; }
   .btn-fire { background: var(--buy); color: white; }
   .btn-stop { background: var(--sell); color: white; }
-  .btn-buy { background: var(--buy); color: white; }
-  .btn-sell { background: var(--sell); color: white; }
   .status-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sell); }
   .dot.connected { background: var(--buy); }
@@ -96,13 +99,13 @@
     color: var(--muted);
   }
   .balance-pill.live { color: var(--buy); border-color: rgba(38,169,105,0.4); }
-  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .actions { display: flex; gap: 10px; align-items: center; }
   .log {
     background: #0d1117;
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;
-    height: 320px;
+    height: 300px;
     overflow-y: auto;
     font-family: ui-monospace, 'SF Mono', Consolas, monospace;
     font-size: 12.5px;
@@ -116,8 +119,7 @@
   .log-balance { color: #3b82f6; font-weight: 600; }
   .log-win { color: #26a969; font-weight: 700; }
   .log-loss { color: #d9534f; font-weight: 700; }
-  .log-signal { color: #a78bfa; }
-  .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .trigger-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
   .toggle-btn {
     flex: 1;
     padding: 9px;
@@ -125,10 +127,9 @@
     border: 1px solid var(--border);
     background: #0d1117;
     color: var(--muted);
-    font-size: 12.5px;
+    font-size: 13px;
     cursor: pointer;
     text-align: center;
-    transition: all 0.15s;
   }
   .toggle-btn.active {
     border-color: var(--accent);
@@ -181,9 +182,11 @@
     background: rgba(217,83,79,0.15);
     color: #ff8b87;
   }
+
+  /* Stats bar */
   .stats-bar {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 10px;
     margin-bottom: 14px;
   }
@@ -191,18 +194,18 @@
     background: #0d1117;
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 10px 8px;
+    padding: 10px 12px;
     text-align: center;
   }
   .stat-label {
-    font-size: 10px;
+    font-size: 10.5px;
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 4px;
   }
   .stat-value {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
     font-family: ui-monospace, monospace;
     color: var(--text);
@@ -210,13 +213,12 @@
   .stat-value.win { color: var(--buy); }
   .stat-value.loss { color: var(--sell); }
   .stat-value.neutral { color: var(--muted); }
-  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Deriv Higher / Lower Bot</h1>
-  <div class="subtitle">Pair-mode diagnostics + single-direction signal trading</div>
+  <h1>Higher / Lower Simultaneous Bot</h1>
+  <div class="subtitle">Fires a matched Rise + Fall trade on the same tick</div>
 
   <div class="panel">
     <h2>Connection</h2>
@@ -231,7 +233,7 @@
       ⚠️ REAL ACCOUNT SELECTED — every trade will use live funds
     </div>
 
-    <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()" style="width:100%; margin: 10px 0;">Log in with Deriv</button>
+    <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()" style="width:100%; margin-bottom: 10px; margin-top: 10px;">Log in with Deriv</button>
     <div style="text-align:center; color: var(--muted); font-size: 12px; margin: 6px 0;">— or —</div>
     <div class="row">
       <div class="field" style="flex: 3;">
@@ -258,48 +260,40 @@
           <option value="R_10">Volatility 10 Index</option>
           <option value="R_25">Volatility 25 Index</option>
           <option value="R_50">Volatility 50 Index</option>
-          <option value="R_75">Volatility 75 Index</option>
+          <option value="R_75" selected>Volatility 75 Index</option>
           <option value="R_100">Volatility 100 Index</option>
-          <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
+          <option value="1HZ10V">Volatility 10 (1s) Index</option>
           <option value="1HZ100V">Volatility 100 (1s) Index</option>
         </select>
       </div>
       <div class="field">
-        <label>Stake (USD)</label>
-        <input type="number" id="stake" value="0.35" min="0.35" step="0.01">
+        <label>Buy Stake (USD)</label>
+        <input type="number" id="buyStake" value="2" min="0.35" step="0.01">
+      </div>
+      <div class="field">
+        <label>Sell Stake (USD)</label>
+        <input type="number" id="sellStake" value="2" min="0.35" step="0.01">
       </div>
       <div class="field">
         <label>Duration (ticks)</label>
-        <input type="number" id="duration" value="5" min="1" step="1">
+        <input type="number" id="duration" value="10" min="1" step="1">
       </div>
     </div>
 
-    <label style="margin-bottom: 8px;">Trade Mode</label>
-    <div class="toggle-row">
-      <div class="toggle-btn" id="modeBoth"  onclick="setTradeMode('both')">🎯 Both Directions (pair)</div>
-      <div class="toggle-btn active" id="modeSignal" onclick="setTradeMode('signal')">📈 Auto Signal (single)</div>
-      <div class="toggle-btn" id="modeManual" onclick="setTradeMode('manual')">🖐 Manual Direction</div>
+    <label style="margin-bottom: 8px;">Trigger Mode</label>
+    <div class="trigger-toggle">
+      <div class="toggle-btn active" id="modeManual" onclick="setMode('manual')">Manual (fire on click)</div>
+      <div class="toggle-btn" id="modeAuto" onclick="setMode('auto')">Auto (fire on every new tick)</div>
     </div>
 
-    <div id="signalSettings" class="row">
-      <div class="field">
-        <label>Signal: look at last N ticks</label>
-        <input type="number" id="signalLookback" value="3" min="2" max="10" step="1">
-      </div>
-      <div class="field">
-        <label>Cooldown (ticks after a trade)</label>
-        <input type="number" id="signalCooldown" value="5" min="0" max="50" step="1">
-      </div>
+    <div class="actions">
+      <button class="btn btn-fire" id="fireBtn" onclick="fireTrade()" disabled>Fire Trade Now</button>
+      <button class="btn btn-stop" id="autoStopBtn" onclick="stopAuto()" style="display:none;">Stop Auto-Firing</button>
     </div>
 
-    <div class="actions" style="margin-top: 10px;">
-      <button class="btn btn-fire" id="startBtn" onclick="startEngine()" disabled>▶ Start</button>
-      <button class="btn btn-stop" id="stopBtn" onclick="stopEngine()" style="display:none;">■ Stop</button>
-      <button class="btn btn-buy hidden" id="manualBuyBtn" onclick="manualTrade('CALL')" disabled>BUY (Higher)</button>
-      <button class="btn btn-sell hidden" id="manualSellBtn" onclick="manualTrade('PUT')" disabled>SELL (Lower)</button>
+    <div class="warning">
+      Duration is set in ticks, so actual time depends on the symbol's tick speed. Auto mode fires a new Buy+Sell pair every time a new tick arrives — use with care, as this can place trades continuously.
     </div>
-
-    <div class="warning" id="modeWarning"></div>
   </div>
 
   <div class="panel">
@@ -321,10 +315,6 @@
         <div class="stat-value loss" id="statLosses">0</div>
       </div>
       <div class="stat">
-        <div class="stat-label">Win %</div>
-        <div class="stat-value neutral" id="statWinRate">0%</div>
-      </div>
-      <div class="stat">
         <div class="stat-label">Net P&L</div>
         <div class="stat-value neutral" id="statPnL">0.00</div>
       </div>
@@ -343,22 +333,38 @@
 <script>
 let ws = null;
 let isConnected = false;
-let accountType = 'demo';
+let mode = 'manual';
+let autoFiring = false;
+let currentSymbol = null;
+let accountType = 'demo';   // 'demo' | 'real'
 let connectedAccountId = null;
 
-let tradeMode = 'signal';
-let running = false;
-let subscribedTicks = false;
-
-const tickHistory = [];
-let cooldownRemaining = 0;
-let lastSignalDir = null;
-
-const pendingContracts = {};
-const pendingPairMeta = [];
-
+// Session stats
 const stats = { total: 0, wins: 0, losses: 0, pnl: 0 };
 
+// Map of contract_id -> metadata about the trade we placed (buy or sell)
+const pendingContracts = {};
+
+const APP_ID = '34nCrhkce6S7N2Yy987vr';
+const OAUTH_AUTHORIZE_URL = 'https://auth.deriv.com/oauth2/auth';
+const OAUTH_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
+const OAUTH_SCOPE = 'trade';
+const API_BASE = 'https://api.derivws.com';
+
+// ---------------- Account type toggle ----------------
+function setAccountType(type) {
+  if (isConnected) {
+    log('Disconnect before switching account type.', 'error');
+    return;
+  }
+  accountType = type;
+  document.getElementById('acctDemo').classList.toggle('active', type === 'demo');
+  document.getElementById('acctReal').classList.toggle('active', type === 'real');
+  document.getElementById('dangerBanner').classList.toggle('show', type === 'real');
+  log('Account type set to ' + (type === 'demo' ? 'DEMO (virtual)' : 'REAL (live money)'), 'info');
+}
+
+// ---------------- Log / stats helpers ----------------
 function log(message, type = 'info') {
   const logEl = document.getElementById('log');
   const entry = document.createElement('div');
@@ -368,92 +374,52 @@ function log(message, type = 'info') {
   logEl.appendChild(entry);
   logEl.scrollTop = logEl.scrollHeight;
 }
+
 function clearLog() {
   document.getElementById('log').innerHTML = '';
   log('Activity log cleared.', 'info');
 }
+
+function resetStats() {
+  stats.total = 0;
+  stats.wins = 0;
+  stats.losses = 0;
+  stats.pnl = 0;
+  refreshStatsUI();
+  log('Session stats reset.', 'info');
+}
+
 function refreshStatsUI() {
   document.getElementById('statTotal').textContent = stats.total;
   document.getElementById('statWins').textContent = stats.wins;
   document.getElementById('statLosses').textContent = stats.losses;
-  const rate = stats.total ? Math.round((stats.wins / stats.total) * 100) : 0;
-  document.getElementById('statWinRate').textContent = rate + '%';
   const pnlEl = document.getElementById('statPnL');
   pnlEl.textContent = (stats.pnl >= 0 ? '+' : '') + stats.pnl.toFixed(2);
   pnlEl.classList.remove('win', 'loss', 'neutral');
   pnlEl.classList.add(stats.pnl > 0 ? 'win' : stats.pnl < 0 ? 'loss' : 'neutral');
 }
-function resetStats() {
-  stats.total = 0; stats.wins = 0; stats.losses = 0; stats.pnl = 0;
+
+function recordResult(profit, contractId, contractType, stake) {
+  stats.total += 1;
+  if (profit > 0) stats.wins += 1;
+  else stats.losses += 1;
+  stats.pnl += profit;
   refreshStatsUI();
-  log('Session stats reset.', 'info');
-}
-function setStatus(connected, text) {
-  isConnected = connected;
-  document.getElementById('statusDot').classList.toggle('connected', connected);
-  document.getElementById('statusText').textContent = text;
-  updateButtonStates();
-}
-function updateBalanceDisplay(balance, currency) {
-  const pill = document.getElementById('balancePill');
-  pill.textContent = `${Number(balance).toFixed(2)} ${currency}`;
-  pill.classList.add('live');
-}
-function updateButtonStates() {
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const manualBuy = document.getElementById('manualBuyBtn');
-  const manualSell = document.getElementById('manualSellBtn');
 
-  startBtn.disabled = !isConnected || running;
-  stopBtn.disabled = !running;
+  const tag = accountType === 'real' ? '[REAL]' : '[DEMO]';
+  const label = contractType === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)';
+  const outcome = profit > 0 ? 'WON' : 'LOST';
+  const typeClass = profit > 0 ? 'win' : 'loss';
 
-  const manual = tradeMode === 'manual';
-  manualBuy.disabled = !isConnected || !manual;
-  manualSell.disabled = !isConnected || !manual;
-
-  if (manual && isConnected) {
-    manualBuy.style.display = 'inline-block';
-    manualSell.style.display = 'inline-block';
-    startBtn.style.display = 'none';
-    stopBtn.style.display = 'none';
-  } else {
-    manualBuy.style.display = 'none';
-    manualSell.style.display = 'none';
-    startBtn.style.display = 'inline-block';
-    stopBtn.style.display = running ? 'inline-block' : 'none';
-  }
+  log(
+    `${outcome} ${tag} ${label} — contract ${contractId}, stake $${stake.toFixed(2)}, ` +
+    `profit ${profit >= 0 ? '+' : ''}${profit.toFixed(2)} | ` +
+    `Session: ${stats.total} trades, ${stats.wins}W/${stats.losses}L, P&L ${stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}`,
+    typeClass
+  );
 }
 
-function setAccountType(type) {
-  if (isConnected) { log('Disconnect before switching account type.', 'error'); return; }
-  accountType = type;
-  document.getElementById('acctDemo').classList.toggle('active', type === 'demo');
-  document.getElementById('acctReal').classList.toggle('active', type === 'real');
-  document.getElementById('dangerBanner').classList.toggle('show', type === 'real');
-}
-
-function setTradeMode(m) {
-  if (running) { log('Stop the engine before switching modes.', 'error'); return; }
-  tradeMode = m;
-  document.getElementById('modeBoth').classList.toggle('active', m === 'both');
-  document.getElementById('modeSignal').classList.toggle('active', m === 'signal');
-  document.getElementById('modeManual').classList.toggle('active', m === 'manual');
-
-  document.getElementById('signalSettings').style.display = (m === 'signal') ? 'flex' : 'none';
-
-  const w = document.getElementById('modeWarning');
-  if (m === 'both') {
-    w.textContent = 'Pair mode: fires CALL + PUT every tick. Diagnostic only — this loses the spread by design.';
-  } else if (m === 'signal') {
-    w.textContent = 'Auto Signal: fires one trade when the last N ticks all move in the same direction. Cooldown prevents rapid-fire entries.';
-  } else {
-    w.textContent = 'Manual Direction: you click BUY or SELL to fire one trade at the current tick.';
-  }
-
-  updateButtonStates();
-}
-
+// ---------------- PKCE helpers ----------------
 function base64UrlEncode(buffer) {
   let str = '';
   const bytes = new Uint8Array(buffer);
@@ -472,19 +438,16 @@ async function sha256Base64Url(input) {
   const digest = await crypto.subtle.digest('SHA-256', data);
   return base64UrlEncode(digest);
 }
-const APP_ID = '34nCrhkce6S7N2Yy987vr';
-const OAUTH_AUTHORIZE_URL = 'https://auth.deriv.com/oauth2/auth';
-const OAUTH_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
-const OAUTH_SCOPE = 'trade';
-const API_BASE = 'https://api.derivws.com';
 
 async function loginWithDeriv() {
   const redirectUri = window.location.href.split('?')[0].split('#')[0];
   const codeVerifier = randomString(64);
   const oauthState = randomString(24);
   const codeChallenge = await sha256Base64Url(codeVerifier);
+
   sessionStorage.setItem('hl_pkce_verifier', codeVerifier);
   sessionStorage.setItem('hl_oauth_state', oauthState);
+
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: APP_ID,
@@ -496,10 +459,14 @@ async function loginWithDeriv() {
   });
   window.location.href = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
 }
+
 async function exchangeCodeForToken(code) {
   const redirectUri = window.location.href.split('?')[0].split('#')[0];
   const codeVerifier = sessionStorage.getItem('hl_pkce_verifier');
-  if (!codeVerifier) { setStatus(false, 'Login session expired'); return; }
+  if (!codeVerifier) {
+    setStatus(false, 'Login session expired — try logging in again');
+    return;
+  }
   try {
     const resp = await fetch(OAUTH_TOKEN_URL, {
       method: 'POST',
@@ -521,28 +488,57 @@ async function exchangeCodeForToken(code) {
       connect();
     } else {
       setStatus(false, 'Login failed');
-      log('Token exchange failed: ' + (data.error_description || data.error || 'unknown'), 'error');
+      log('Token exchange failed: ' + (data.error_description || data.error || 'unknown error'), 'error');
     }
   } catch (err) {
     setStatus(false, 'Login request failed');
-    log('Token exchange failed — use "Connect with token" instead.', 'error');
+    log('Token exchange request failed — Deriv may be blocking browser-side exchange. Use "Connect with token" instead.', 'error');
+    console.error('Token exchange error:', err);
   }
 }
+
 function checkOauthReturn() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
   const returnedState = params.get('state');
   const savedState = sessionStorage.getItem('hl_oauth_state');
-  window.history.replaceState({}, document.title, window.location.href.split('?')[0]);
+
+  const cleanUrl = window.location.href.split('?')[0];
+  window.history.replaceState({}, document.title, cleanUrl);
+
   if (code) {
     if (savedState && returnedState !== savedState) {
-      log('State mismatch on OAuth return.', 'error');
+      setStatus(false, 'Login security check failed — try again');
+      log('State mismatch on OAuth return — aborting for safety.', 'error');
       return;
     }
     exchangeCodeForToken(code);
   }
 }
 
+function setStatus(connected, text) {
+  isConnected = connected;
+  document.getElementById('statusDot').classList.toggle('connected', connected);
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('fireBtn').disabled = !connected;
+}
+
+function updateBalanceDisplay(balance, currency) {
+  const pill = document.getElementById('balancePill');
+  pill.textContent = `${Number(balance).toFixed(2)} ${currency}`;
+  pill.classList.add('live');
+}
+
+function setMode(newMode) {
+  mode = newMode;
+  document.getElementById('modeManual').classList.toggle('active', mode === 'manual');
+  document.getElementById('modeAuto').classList.toggle('active', mode === 'auto');
+  document.getElementById('fireBtn').style.display = mode === 'manual' ? 'inline-block' : 'none';
+  document.getElementById('autoStopBtn').style.display = 'none';
+  if (mode === 'manual' && autoFiring) stopAuto();
+}
+
+// ---------------- Account classifier ----------------
 function accountIsDemo(a) {
   const grp = String(a.group || a.account_type || a.type || '').toLowerCase();
   if (grp.includes('demo') || grp.includes('virtual')) return true;
@@ -555,12 +551,20 @@ function accountIsDemo(a) {
   return null;
 }
 
+// ---------------- Connect (OTP flow) ----------------
 async function connect() {
   const token = document.getElementById('apiToken').value.trim();
-  if (!token) { log('Paste a token first.', 'error'); return; }
+  if (!token) {
+    log('Please log in with Deriv, or paste an API token, first.', 'error');
+    return;
+  }
 
   if (accountType === 'real') {
-    if (!confirm('Connecting to REAL account. Every trade uses real money. Continue?')) return;
+    const ok = confirm('You are about to connect to your REAL Deriv account.\n\nEvery trade will use real money.\n\nContinue?');
+    if (!ok) {
+      log('Real account connection cancelled.', 'info');
+      return;
+    }
   }
 
   setStatus(false, 'Fetching accounts...');
@@ -569,21 +573,37 @@ async function connect() {
       headers: { 'Authorization': `Bearer ${token}`, 'Deriv-App-ID': APP_ID }
     });
     const accData = await accResp.json();
+
     if (!accResp.ok) {
       log('Account lookup failed: ' + (accData.error?.message || accResp.status), 'error');
-      setStatus(false, 'Error'); return;
+      setStatus(false, 'Error');
+      return;
     }
+
     const accounts = accData.data || accData.accounts || accData;
-    if (!Array.isArray(accounts) || !accounts.length) {
-      log('No accounts returned.', 'error');
-      setStatus(false, 'Error'); return;
+    console.log('ACCOUNTS:', accounts);
+
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      log('No accounts returned for this token.', 'error');
+      setStatus(false, 'Error');
+      return;
     }
+
     const wantDemo = accountType === 'demo';
-    let chosen = accounts.find(a => accountIsDemo(a) === wantDemo) || accounts[0];
+    let chosen = accounts.find(a => accountIsDemo(a) === wantDemo);
+    if (!chosen) chosen = accounts[0];
+
     const accountId = chosen.account_id || chosen.id || chosen.loginid;
-    if (!accountId) { log('Account has no id.', 'error'); setStatus(false, 'Error'); return; }
+    if (!accountId) {
+      log('Account object has no id field. See console.', 'error');
+      console.error('Bad account object:', chosen);
+      setStatus(false, 'Error');
+      return;
+    }
+
     connectedAccountId = accountId;
-    log(`Selected ${accountIsDemo(chosen) === true ? 'DEMO' : 'REAL'} account: ${accountId}`, 'info');
+    const classified = accountIsDemo(chosen);
+    log(`Selected ${classified === true ? 'DEMO' : classified === false ? 'REAL' : 'UNKNOWN'} account: ${accountId}`, 'info');
 
     setStatus(false, 'Requesting session...');
     const otpResp = await fetch(`${API_BASE}/trading/v1/options/accounts/${accountId}/otp`, {
@@ -592,36 +612,48 @@ async function connect() {
     });
     const otpData = await otpResp.json();
     if (!otpResp.ok || !otpData.data?.url) {
-      log('OTP failed: ' + (otpData.error?.message || otpResp.status), 'error');
-      setStatus(false, 'Error'); return;
+      log('Session request failed: ' + (otpData.error?.message || otpResp.status), 'error');
+      setStatus(false, 'Error');
+      return;
     }
 
-    log('WebSocket endpoint: ' + otpData.data.url.split('?')[0], 'info');
+    const wsEndpoint = otpData.data.url.split('?')[0];
+    log('WebSocket endpoint: ' + wsEndpoint, 'info');
+
     setStatus(false, 'Connecting...');
     ws = new WebSocket(otpData.data.url);
 
     ws.onopen = () => {
-      log('Connected. Requesting balance...', 'info');
+      log('WebSocket open. Requesting balance...', 'info');
       setStatus(true, 'Connected — ' + accountId);
       ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
     };
-    ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
-    ws.onerror = () => { log('WebSocket error.', 'error'); setStatus(false, 'Error'); };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleMessage(data);
+    };
+
+    ws.onerror = () => {
+      log('WebSocket error.', 'error');
+      setStatus(false, 'Error');
+    };
+
     ws.onclose = () => {
       log('Connection closed.', 'info');
       setStatus(false, 'Disconnected');
-      running = false;
-      updateButtonStates();
       document.getElementById('balancePill').classList.remove('live');
       document.getElementById('balancePill').textContent = '— no balance —';
+      connectedAccountId = null;
     };
   } catch (err) {
-    log('Connection failed.', 'error');
-    console.error(err);
+    log('Connection failed — see console.', 'error');
     setStatus(false, 'Error');
+    console.error('Connect error:', err);
   }
 }
 
+// ---------------- Message router ----------------
 function handleMessage(data) {
   if (data.error) {
     log('API error: ' + (data.error.message || JSON.stringify(data.error)), 'error');
@@ -630,128 +662,87 @@ function handleMessage(data) {
 
   switch (data.msg_type) {
     case 'balance': {
-      const b = data.balance || {};
-      if (b.balance !== undefined) updateBalanceDisplay(b.balance, b.currency || 'USD');
+      const b = data.balance || data;
+      if (b && b.balance !== undefined) {
+        updateBalanceDisplay(b.balance, b.currency || 'USD');
+      }
       break;
     }
 
     case 'buy': {
       try {
-        const cid = data.buy.contract_id;
-        const meta = pendingPairMeta.shift() || {};
-        pendingContracts[cid] = {
-          contractType: meta.contractType || 'CALL',
-          stake: meta.stake || parseFloat(data.buy.buy_price),
-          recorded: false
-        };
-        const ct = pendingContracts[cid].contractType;
+        const contractId = data.buy.contract_id;
+        const buyPrice = parseFloat(data.buy.buy_price);
+        const meta = pendingContracts[contractId] || {};
+        const ct = meta.contractType || 'CALL';
+        const cls = ct === 'CALL' ? 'buy' : 'sell';
         log((ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
-            ` placed — contract ${cid}, price ${data.buy.buy_price}`, ct === 'CALL' ? 'buy' : 'sell');
+            ' placed — contract ' + contractId +
+            ', buy price ' + buyPrice, cls);
+
+        // Subscribe to this contract to receive the win/loss result
         ws.send(JSON.stringify({
           proposal_open_contract: 1,
-          contract_id: cid,
+          contract_id: contractId,
           subscribe: 1
         }));
-      } catch (e) { console.error(e, data); }
+      } catch (e) {
+        console.error('Buy parse error:', e, data);
+      }
       break;
     }
 
     case 'proposal_open_contract': {
       const c = data.proposal_open_contract;
-      if (!c || !c.is_sold) break;
-      const cid = c.contract_id;
-      const meta = pendingContracts[cid];
-      if (!meta || meta.recorded) break;
-      meta.recorded = true;
+      if (!c) break;
 
-      const profit = parseFloat(c.profit);
-      const ct = meta.contractType;
-      stats.total++; stats.pnl += profit;
-      if (profit > 0) stats.wins++; else stats.losses++;
-      refreshStatsUI();
+      // We only care once the contract has been sold (settled)
+      if (c.is_sold) {
+        const cid = c.contract_id;
+        const meta = pendingContracts[cid] || {};
 
-      const tag = accountType === 'real' ? '[REAL]' : '[DEMO]';
-      const label = ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)';
-      const outcome = profit > 0 ? 'WON' : 'LOST';
-      log(`${outcome} ${tag} ${label} — #${cid}, stake $${meta.stake.toFixed(2)}, ` +
-          `P&L ${profit >= 0 ? '+' : ''}${profit.toFixed(2)} | ` +
-          `Session ${stats.total} trades ${stats.wins}W/${stats.losses}L P&L ${stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}`,
-          profit > 0 ? 'win' : 'loss');
+        // Guard against duplicate logs — remove from pending so we only record once
+        if (meta.recorded) break;
+        meta.recorded = true;
 
-      ws.send(JSON.stringify({ forget: data.proposal_open_contract.id }));
+        const profit = parseFloat(c.profit);
+        const ct = meta.contractType || c.contract_type || 'CALL';
+        const stake = meta.stake || parseFloat(c.buy_price) || 0;
+
+        recordResult(profit, cid, ct, stake);
+
+        // Unsubscribe from this contract now that it's settled
+        ws.send(JSON.stringify({
+          forget: data.proposal_open_contract.id
+        }));
+      }
       break;
     }
 
     case 'tick':
-      onTick(data.tick);
+      if (mode === 'auto' && autoFiring) {
+        sendTradePair(data.tick.quote);
+      }
+      break;
+
+    case 'forget':
+      break;
+
+    default:
       break;
   }
 }
 
-function startEngine() {
-  if (!isConnected || running) return;
-  if (tradeMode === 'manual') return;
-  const sym = document.getElementById('symbol').value;
-  ws.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
-  subscribedTicks = true;
-  running = true;
-  tickHistory.length = 0;
-  cooldownRemaining = 0;
-  lastSignalDir = null;
-  log(`Engine started — mode: ${tradeMode}, symbol: ${sym}`, 'info');
-  updateButtonStates();
+// ---------------- Tick subscription ----------------
+function subscribeToTicks(symbol) {
+  ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+  currentSymbol = symbol;
 }
-function stopEngine() {
-  if (!running) return;
-  running = false;
-  if (subscribedTicks) { ws.send(JSON.stringify({ forget_all: 'ticks' })); subscribedTicks = false; }
-  log('Engine stopped.', 'info');
-  updateButtonStates();
+function unsubscribeTicks() {
+  if (currentSymbol) ws.send(JSON.stringify({ forget_all: 'ticks' }));
 }
 
-function onTick(tick) {
-  if (!tick) return;
-  tickHistory.push({ quote: parseFloat(tick.quote), epoch: tick.epoch });
-  if (tickHistory.length > 50) tickHistory.shift();
-
-  if (!running) return;
-
-  if (cooldownRemaining > 0) cooldownRemaining--;
-
-  if (tradeMode === 'both') {
-    firePair(tick.quote);
-    return;
-  }
-
-  if (tradeMode === 'signal') {
-    if (cooldownRemaining > 0) return;
-    const lookback = parseInt(document.getElementById('signalLookback').value, 10);
-    if (tickHistory.length < lookback + 1) return;
-
-    let up = 0, down = 0;
-    for (let i = tickHistory.length - lookback; i < tickHistory.length; i++) {
-      const prev = tickHistory[i - 1].quote;
-      const cur = tickHistory[i].quote;
-      if (cur > prev) up++;
-      else if (cur < prev) down++;
-    }
-
-    let dir = null;
-    if (up === lookback) dir = 'CALL';
-    else if (down === lookback) dir = 'PUT';
-
-    if (dir) {
-      const reason = dir === 'CALL'
-        ? `${lookback} up ticks in a row`
-        : `${lookback} down ticks in a row`;
-      log(`Signal: ${dir === 'CALL' ? 'BUY' : 'SELL'} (${reason})`, 'signal');
-      fireSingle(dir, tick.quote);
-      lastSignalDir = dir;
-      cooldownRemaining = parseInt(document.getElementById('signalCooldown').value, 10);
-    }
-  }
-}
-
+// ---------------- Trade logic ----------------
 function buildBuyRequest(contractType, stake, symbol, duration) {
   return {
     buy: 1,
@@ -768,52 +759,86 @@ function buildBuyRequest(contractType, stake, symbol, duration) {
   };
 }
 
-function firePair(refPrice) {
+function sendTradePair(referencePrice) {
   const symbol = document.getElementById('symbol').value;
-  const stake = parseFloat(document.getElementById('stake').value);
+  const buyStake = parseFloat(document.getElementById('buyStake').value);
+  const sellStake = parseFloat(document.getElementById('sellStake').value);
   const duration = parseInt(document.getElementById('duration').value, 10);
 
-  pendingPairMeta.push({ contractType: 'CALL', stake });
-  pendingPairMeta.push({ contractType: 'PUT',  stake });
+  if (!isConnected) { log('Not connected.', 'error'); return; }
 
-  ws.send(JSON.stringify(buildBuyRequest('CALL', stake, symbol, duration)));
-  ws.send(JSON.stringify(buildBuyRequest('PUT',  stake, symbol, duration)));
+  const higherReq = buildBuyRequest('CALL', buyStake, symbol, duration);
+  const lowerReq  = buildBuyRequest('PUT',  sellStake, symbol, duration);
 
-  const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Fired PAIR${tag} at ${refPrice} — stake $${stake} x2, ${duration} ticks`, 'info');
-}
+  // Mark this tick as the anchor so the buy handler can find metadata later.
+  // We stash "next pair metadata" and the buy responses will attach to it in order.
+  pendingPairMeta.push({ contractType: 'CALL', stake: buyStake });
+  pendingPairMeta.push({ contractType: 'PUT',  stake: sellStake });
 
-function fireSingle(contractType, refPrice) {
-  const symbol = document.getElementById('symbol').value;
-  const stake = parseFloat(document.getElementById('stake').value);
-  const duration = parseInt(document.getElementById('duration').value, 10);
-
-  pendingPairMeta.push({ contractType, stake });
-  ws.send(JSON.stringify(buildBuyRequest(contractType, stake, symbol, duration)));
+  ws.send(JSON.stringify(higherReq));
+  ws.send(JSON.stringify(lowerReq));
 
   const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Fired SINGLE ${contractType}${tag} at ${refPrice} — stake $${stake}, ${duration} ticks`, 'info');
+  log('Fired pair' + tag + ' at ref price ' + referencePrice +
+      ' — Buy $' + buyStake + ' / Sell $' + sellStake +
+      ', duration ' + duration + ' ticks.', 'info');
 }
 
-function manualTrade(contractType) {
-  if (!isConnected || tradeMode !== 'manual') return;
+// Queue of metadata for the next buy responses, in order
+const pendingPairMeta = [];
+
+// Patch buy handler to attach metadata when buy response arrives.
+// We re-wrap handleMessage to intercept 'buy' cleanly here.
+const _originalHandleMessage = handleMessage;
+handleMessage = function (data) {
+  if (data && data.msg_type === 'buy' && data.buy && data.buy.contract_id) {
+    const meta = pendingPairMeta.shift();
+    if (meta) {
+      pendingContracts[data.buy.contract_id] = {
+        contractType: meta.contractType,
+        stake: meta.stake,
+        recorded: false
+      };
+    }
+  }
+  _originalHandleMessage(data);
+};
+
+function fireTrade() {
+  if (!isConnected) return;
   const symbol = document.getElementById('symbol').value;
   ws.send(JSON.stringify({ ticks: symbol }));
+
   const handler = (event) => {
-    const d = JSON.parse(event.data);
-    if (d.msg_type === 'tick' && d.tick && d.tick.symbol === symbol) {
-      fireSingle(contractType, d.tick.quote);
+    const data = JSON.parse(event.data);
+    if (data.msg_type === 'tick' && data.tick && data.tick.symbol === symbol) {
+      sendTradePair(data.tick.quote);
       ws.removeEventListener('message', handler);
     }
   };
   ws.addEventListener('message', handler);
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  setTradeMode('signal');
-  refreshStatsUI();
-  checkOauthReturn();
+function startAutoOnSymbol() {
+  const symbol = document.getElementById('symbol').value;
+  subscribeToTicks(symbol);
+  autoFiring = true;
+  document.getElementById('autoStopBtn').style.display = 'inline-block';
+  log('Auto-firing enabled on ' + symbol + '. New pair fires on every tick.', 'info');
+}
+
+function stopAuto() {
+  autoFiring = false;
+  unsubscribeTicks();
+  document.getElementById('autoStopBtn').style.display = 'none';
+  log('Auto-firing stopped.', 'info');
+}
+
+document.getElementById('modeAuto').addEventListener('click', () => {
+  if (isConnected) startAutoOnSymbol();
 });
+
+window.addEventListener('DOMContentLoaded', checkOauthReturn);
 </script>
 </body>
 </html>

@@ -169,12 +169,16 @@
 
   <div class="panel">
     <h2>Connection</h2>
-    <div id="loginPrompt">
-      <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()">Log in with Deriv</button>
-    </div>
-    <div id="accountPicker" style="display:none; margin-top: 12px;">
-      <label style="margin-bottom: 8px;">Select account to trade with</label>
-      <div id="accountList" style="margin-bottom: 12px;"></div>
+    <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()" style="width:100%; margin-bottom: 10px;">Log in with Deriv</button>
+    <div style="text-align:center; color: var(--muted); font-size: 12px; margin: 6px 0;">— or —</div>
+    <div class="row">
+      <div class="field" style="flex: 3;">
+        <label>Paste API token manually</label>
+        <input type="text" id="apiToken" placeholder="Paste your read/trade token" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field" style="flex: 1; align-self: flex-end;">
+        <button class="btn btn-connect" id="connectBtn" onclick="connect()">Connect with token</button>
+      </div>
     </div>
     <div class="status-bar" style="margin-top: 12px;">
       <div class="dot" id="statusDot"></div>
@@ -242,53 +246,115 @@ let currentSymbol = null;
 let tickSubscriptionId = null;
 
 const APP_ID = '34nCrhkce6S7N2Yy987vr'; // Kimaro's registered Deriv app_id
-const REDIRECT_URI = 'https://mentorculture1-oss.github.io/Kimaro_bot/';
+const OAUTH_AUTHORIZE_URL = 'https://auth.deriv.com/oauth2/auth';
+const OAUTH_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
+const OAUTH_SCOPE = 'trade';
+const API_BASE = 'https://api.derivws.com';
 
-// Kick off Deriv's OAuth login. Deriv handles the login/consent screen itself,
-// then redirects back to REDIRECT_URI with account/token pairs as URL params.
-function loginWithDeriv() {
-  window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=' + APP_ID;
+// ---------------- PKCE helpers ----------------
+function base64UrlEncode(buffer) {
+  let str = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// Parses acct1/token1/cur1, acct2/token2/cur2, ... from the redirect URL
-// that Deriv sends the user back to after a successful OAuth login.
-function parseOAuthRedirect() {
-  const params = new URLSearchParams(window.location.search);
-  const accounts = [];
-  let i = 1;
-  while (params.has('acct' + i)) {
-    accounts.push({
-      loginid: params.get('acct' + i),
-      token: params.get('token' + i),
-      currency: params.get('cur' + i)
-    });
-    i++;
-  }
-  return accounts;
+function randomString(length) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array).map(v => chars[v % chars.length]).join('');
 }
 
-function showAccountPicker(accounts) {
-  document.getElementById('loginPrompt').style.display = 'none';
-  const picker = document.getElementById('accountPicker');
-  const list = document.getElementById('accountList');
-  list.innerHTML = '';
-  accounts.forEach((acc, idx) => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:8px;';
-    row.innerHTML =
-      '<button class="btn btn-connect" style="padding:7px 14px;" onclick="connectWithAccount(' + idx + ')">Use</button>' +
-      '<span>' + acc.loginid + ' (' + acc.currency + ')</span>';
-    list.appendChild(row);
+async function sha256Base64Url(input) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return base64UrlEncode(digest);
+}
+
+// Kick off Deriv's OAuth2 + PKCE login. Deriv handles the login/consent screen
+// itself, then redirects back to this same page with ?code=...&state=...
+async function loginWithDeriv() {
+  const redirectUri = window.location.href.split('?')[0].split('#')[0];
+  const codeVerifier = randomString(64);
+  const oauthState = randomString(24);
+  const codeChallenge = await sha256Base64Url(codeVerifier);
+
+  sessionStorage.setItem('hl_pkce_verifier', codeVerifier);
+  sessionStorage.setItem('hl_oauth_state', oauthState);
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: APP_ID,
+    redirect_uri: redirectUri,
+    scope: OAUTH_SCOPE,
+    state: oauthState,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256'
   });
-  picker.style.display = 'block';
-  log('Logged in via Deriv. Choose which account to trade with.', 'info');
+
+  window.location.href = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
 }
 
-let oauthAccounts = [];
+// Exchanges the authorization code Deriv sent back for an access token,
+// then connects using it. Deriv's docs say to do this exchange server-side —
+// if it's blocked by CORS, use "Connect with token" (manual PAT) instead.
+async function exchangeCodeForToken(code) {
+  const redirectUri = window.location.href.split('?')[0].split('#')[0];
+  const codeVerifier = sessionStorage.getItem('hl_pkce_verifier');
+  if (!codeVerifier) {
+    setStatus(false, 'Login session expired — try logging in again');
+    return;
+  }
+  try {
+    const resp = await fetch(OAUTH_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: APP_ID,
+        code: code,
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier
+      })
+    });
+    const data = await resp.json();
+    if (data.access_token) {
+      document.getElementById('apiToken').value = data.access_token;
+      sessionStorage.removeItem('hl_pkce_verifier');
+      sessionStorage.removeItem('hl_oauth_state');
+      log('Logged in via Deriv. Connecting...', 'info');
+      connect();
+    } else {
+      setStatus(false, 'Login failed');
+      log('Token exchange failed: ' + (data.error_description || data.error || 'unknown error'), 'error');
+    }
+  } catch (err) {
+    setStatus(false, 'Login request failed');
+    log('Token exchange request failed — Deriv may be blocking browser-side exchange. Use "Connect with token" instead.', 'error');
+    console.error('Token exchange error:', err);
+  }
+}
 
-function connectWithAccount(idx) {
-  const acc = oauthAccounts[idx];
-  connect(acc.token, acc.loginid);
+// On load, check if we've just been redirected back from Deriv's OAuth login.
+function checkOauthReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const returnedState = params.get('state');
+  const savedState = sessionStorage.getItem('hl_oauth_state');
+
+  const cleanUrl = window.location.href.split('?')[0];
+  window.history.replaceState({}, document.title, cleanUrl);
+
+  if (code) {
+    if (savedState && returnedState !== savedState) {
+      setStatus(false, 'Login security check failed — try again');
+      log('State mismatch on OAuth return — aborting for safety.', 'error');
+      return;
+    }
+    exchangeCodeForToken(code);
+  }
 }
 
 function log(message, type = 'info') {
@@ -319,34 +385,77 @@ function setMode(newMode) {
   }
 }
 
-function connect(token, loginid) {
+// Deriv retired the old {"authorize": token} WebSocket handshake. The current flow is:
+//   1. GET  /trading/v1/options/accounts            -> list of accounts
+//   2. POST /trading/v1/options/accounts/{id}/otp    -> one-time-use WebSocket URL (valid 120s)
+//   3. Connect directly to that URL — no auth message needed after that.
+async function connect() {
+  const token = document.getElementById('apiToken').value.trim();
   if (!token) {
-    log('No account token available. Please log in with Deriv first.', 'error');
+    log('Please log in with Deriv, or paste an API token, first.', 'error');
     return;
   }
 
-  setStatus(false, 'Connecting as ' + loginid + '...');
-  ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=' + APP_ID);
+  setStatus(false, 'Fetching account...');
+  try {
+    const accResp = await fetch(`${API_BASE}/trading/v1/options/accounts`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Deriv-App-ID': APP_ID }
+    });
+    const accData = await accResp.json();
+    if (!accResp.ok) {
+      log('Account lookup failed: ' + (accData.error?.message || accResp.status), 'error');
+      setStatus(false, 'Error');
+      return;
+    }
+    const accounts = accData.data || accData.accounts || accData;
+    const account = Array.isArray(accounts) ? accounts[0] : accounts;
+    const accountId = account && (account.account_id || account.id);
+    if (!accountId) {
+      log('No trading account found for this token.', 'error');
+      setStatus(false, 'Error');
+      return;
+    }
 
-  ws.onopen = () => {
-    log('WebSocket connected. Authorizing...');
-    ws.send(JSON.stringify({ authorize: token }));
-  };
+    setStatus(false, 'Requesting session...');
+    const otpResp = await fetch(`${API_BASE}/trading/v1/options/accounts/${accountId}/otp`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Deriv-App-ID': APP_ID }
+    });
+    const otpData = await otpResp.json();
+    if (!otpResp.ok || !otpData.data?.url) {
+      log('Session request failed: ' + (otpData.error?.message || otpResp.status), 'error');
+      setStatus(false, 'Error');
+      return;
+    }
 
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    handleMessage(data);
-  };
+    // OTP is single-use and expires in ~120s — connect immediately.
+    setStatus(false, 'Connecting...');
+    ws = new WebSocket(otpData.data.url);
 
-  ws.onerror = (err) => {
-    log('WebSocket error. Check your token and connection.', 'error');
+    ws.onopen = () => {
+      log('Connected as ' + accountId + '.', 'info');
+      setStatus(true, 'Connected — ' + accountId);
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleMessage(data);
+    };
+
+    ws.onerror = () => {
+      log('WebSocket error.', 'error');
+      setStatus(false, 'Error');
+    };
+
+    ws.onclose = () => {
+      log('Connection closed.', 'info');
+      setStatus(false, 'Disconnected');
+    };
+  } catch (err) {
+    log('Connection failed — see console.', 'error');
     setStatus(false, 'Error');
-  };
-
-  ws.onclose = () => {
-    log('Connection closed.', 'info');
-    setStatus(false, 'Disconnected');
-  };
+    console.error('Connect error:', err);
+  }
 }
 
 function handleMessage(data) {
@@ -465,16 +574,7 @@ document.getElementById('modeAuto').addEventListener('click', () => {
   if (isConnected) startAutoOnSymbol();
 });
 
-// On load, check if we've just been redirected back from Deriv's OAuth login.
-window.addEventListener('DOMContentLoaded', () => {
-  const accounts = parseOAuthRedirect();
-  if (accounts.length > 0) {
-    oauthAccounts = accounts;
-    // Clean the token params out of the visible URL/history for safety.
-    window.history.replaceState({}, document.title, REDIRECT_URI);
-    showAccountPicker(accounts);
-  }
-});
+window.addEventListener('DOMContentLoaded', checkOauthReturn);
 </script>
 </body>
 </html>

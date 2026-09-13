@@ -414,6 +414,24 @@ function setMode(newMode) {
   if (mode === 'manual' && autoFiring) stopAuto();
 }
 
+// ---------------- Account classifier ----------------
+// Deriv has used several account-id prefixes over time:
+//   Demo (virtual):  VRTC (legacy), DOT (current)
+//   Real:            CR (legacy), ROT (current), MF/ML (some regions)
+// Also, the response often includes a `group` or `account_type` field we can trust.
+function accountIsDemo(a) {
+  const grp = String(a.group || a.account_type || a.type || '').toLowerCase();
+  if (grp.includes('demo') || grp.includes('virtual')) return true;
+  if (grp.includes('real')) return false;
+
+  const id = String(a.account_id || a.id || a.loginid || '').toUpperCase();
+  const demoPrefixes = ['VRTC', 'DOT', 'VRT'];
+  const realPrefixes = ['CR', 'ROT', 'MF', 'ML'];
+  if (demoPrefixes.some(p => id.startsWith(p))) return true;
+  if (realPrefixes.some(p => id.startsWith(p))) return false;
+  return null;
+}
+
 // ---------------- Connect (OTP flow) ----------------
 async function connect() {
   const token = document.getElementById('apiToken').value.trim();
@@ -422,7 +440,6 @@ async function connect() {
     return;
   }
 
-  // Warn before connecting to real
   if (accountType === 'real') {
     const ok = confirm('You are about to connect to your REAL Deriv account.\n\nEvery trade will use real money.\n\nContinue?');
     if (!ok) {
@@ -453,23 +470,28 @@ async function connect() {
       return;
     }
 
-    // Pick account matching selected type
-    const prefix = accountType === 'demo' ? 'VRTC' : 'CR';
-    const chosen = accounts.find(a => {
-      const id = a.account_id || a.id || '';
-      return id.toUpperCase().startsWith(prefix.toUpperCase());
-    });
+    const wantDemo = accountType === 'demo';
 
+    // Primary: use classifier
+    let chosen = accounts.find(a => accountIsDemo(a) === wantDemo);
+
+    // Fallback: if classifier returned null for everything, use the first account
     if (!chosen) {
-      log(`No ${accountType.toUpperCase()} account found. Available: ` +
-          accounts.map(a => (a.account_id || a.id)).join(', '), 'error');
+      log('Could not classify accounts — using the first one.', 'error');
+      chosen = accounts[0];
+    }
+
+    const accountId = chosen.account_id || chosen.id || chosen.loginid;
+    if (!accountId) {
+      log('Account object has no id field. See console.', 'error');
+      console.error('Bad account object:', chosen);
       setStatus(false, 'Error');
       return;
     }
 
-    const accountId = chosen.account_id || chosen.id;
     connectedAccountId = accountId;
-    log(`Selected ${accountType.toUpperCase()} account: ${accountId}`, 'info');
+    const classified = accountIsDemo(chosen);
+    log(`Selected ${classified === true ? 'DEMO' : classified === false ? 'REAL' : 'UNKNOWN'} account: ${accountId}`, 'info');
 
     // Request OTP
     setStatus(false, 'Requesting session...');
@@ -484,19 +506,16 @@ async function connect() {
       return;
     }
 
-    // Log endpoint type (demo/real) for verification
     const wsEndpoint = otpData.data.url.split('?')[0];
     console.log('Connecting to WS endpoint:', wsEndpoint);
     log('WebSocket endpoint: ' + wsEndpoint, 'info');
 
-    // Connect
     setStatus(false, 'Connecting...');
     ws = new WebSocket(otpData.data.url);
 
     ws.onopen = () => {
       log('WebSocket open. Requesting balance...', 'info');
       setStatus(true, 'Connected — ' + accountId);
-      // Ask for balance + subscribe to updates
       ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
     };
 
@@ -534,7 +553,7 @@ function handleMessage(data) {
   switch (data.msg_type) {
     case 'balance': {
       const b = data.balance || data;
-      if (b && (b.balance !== undefined)) {
+      if (b && b.balance !== undefined) {
         updateBalanceDisplay(b.balance, b.currency || 'USD');
         log(`Balance: ${Number(b.balance).toFixed(2)} ${b.currency || 'USD'}`, 'balance');
       }
@@ -568,7 +587,6 @@ function handleMessage(data) {
       break;
 
     default:
-      // Uncomment for verbose debugging:
       // console.log('Unhandled msg:', data);
       break;
   }

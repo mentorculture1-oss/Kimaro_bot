@@ -23,20 +23,9 @@
     color: var(--text);
     padding: 20px;
   }
-  .container {
-    max-width: 720px;
-    margin: 0 auto;
-  }
-  h1 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-  }
-  .subtitle {
-    color: var(--muted);
-    font-size: 13px;
-    margin-bottom: 20px;
-  }
+  .container { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px 0; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -52,22 +41,9 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  .row {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-  }
-  .field {
-    flex: 1;
-    min-width: 140px;
-  }
-  label {
-    display: block;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 5px;
-  }
+  .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 140px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
   input, select {
     width: 100%;
     padding: 9px 10px;
@@ -77,10 +53,7 @@
     color: var(--text);
     font-size: 14px;
   }
-  input:focus, select:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
   .btn {
     padding: 10px 18px;
     border: none;
@@ -95,25 +68,21 @@
   .btn-connect { background: var(--accent); color: white; }
   .btn-fire { background: var(--buy); color: white; }
   .btn-stop { background: var(--sell); color: white; }
-  .status-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    margin-bottom: 4px;
-  }
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--sell);
-  }
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sell); }
   .dot.connected { background: var(--buy); }
-  .actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
+  .balance-pill {
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: #0d1117;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-family: ui-monospace, monospace;
+    color: var(--muted);
   }
+  .balance-pill.live { color: var(--buy); border-color: rgba(38,169,105,0.4); }
+  .actions { display: flex; gap: 10px; align-items: center; }
   .log {
     background: #0d1117;
     border: 1px solid var(--border);
@@ -130,11 +99,8 @@
   .log-sell { color: var(--sell); }
   .log-info { color: var(--muted); }
   .log-error { color: #f59e0b; }
-  .trigger-toggle {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
+  .log-balance { color: #3b82f6; font-weight: 600; }
+  .trigger-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
   .toggle-btn {
     flex: 1;
     padding: 9px;
@@ -160,6 +126,47 @@
     border: 1px solid rgba(245,158,11,0.25);
     border-radius: 6px;
   }
+  .danger-banner {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: rgba(217,83,79,0.15);
+    border: 1px solid rgba(217,83,79,0.6);
+    border-radius: 6px;
+    color: #ff8b87;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .danger-banner.show { display: block; }
+  .acct-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .acct-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #0d1117;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .acct-btn.active {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(59,130,246,0.12);
+  }
+  .acct-btn.active.real {
+    border-color: var(--sell);
+    background: rgba(217,83,79,0.15);
+    color: #ff8b87;
+  }
 </style>
 </head>
 <body>
@@ -169,7 +176,18 @@
 
   <div class="panel">
     <h2>Connection</h2>
-    <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()" style="width:100%; margin-bottom: 10px;">Log in with Deriv</button>
+
+    <label style="margin-bottom: 6px;">Trading Account</label>
+    <div class="acct-selector">
+      <div class="acct-btn active" id="acctDemo" onclick="setAccountType('demo')">🎮 Demo (Virtual)</div>
+      <div class="acct-btn real" id="acctReal" onclick="setAccountType('real')">💰 Real (Live Money)</div>
+    </div>
+
+    <div class="danger-banner" id="dangerBanner">
+      ⚠️ REAL ACCOUNT SELECTED — every trade will use live funds
+    </div>
+
+    <button class="btn btn-connect" id="loginBtn" onclick="loginWithDeriv()" style="width:100%; margin-bottom: 10px; margin-top: 10px;">Log in with Deriv</button>
     <div style="text-align:center; color: var(--muted); font-size: 12px; margin: 6px 0;">— or —</div>
     <div class="row">
       <div class="field" style="flex: 3;">
@@ -177,12 +195,13 @@
         <input type="text" id="apiToken" placeholder="Paste your read/trade token" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       </div>
       <div class="field" style="flex: 1; align-self: flex-end;">
-        <button class="btn btn-connect" id="connectBtn" onclick="connect()">Connect with token</button>
+        <button class="btn btn-connect" id="connectBtn" onclick="connect()">Connect</button>
       </div>
     </div>
     <div class="status-bar" style="margin-top: 12px;">
       <div class="dot" id="statusDot"></div>
       <span id="statusText">Disconnected</span>
+      <span class="balance-pill" id="balancePill">— no balance —</span>
     </div>
   </div>
 
@@ -243,13 +262,27 @@ let isConnected = false;
 let mode = 'manual';
 let autoFiring = false;
 let currentSymbol = null;
-let tickSubscriptionId = null;
+let accountType = 'demo';   // 'demo' | 'real'
+let connectedAccountId = null;
 
-const APP_ID = '34nCrhkce6S7N2Yy987vr'; // Kimaro's registered Deriv app_id
+const APP_ID = '34nCrhkce6S7N2Yy987vr';
 const OAUTH_AUTHORIZE_URL = 'https://auth.deriv.com/oauth2/auth';
 const OAUTH_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
 const OAUTH_SCOPE = 'trade';
 const API_BASE = 'https://api.derivws.com';
+
+// ---------------- Account type toggle ----------------
+function setAccountType(type) {
+  if (isConnected) {
+    log('Disconnect before switching account type.', 'error');
+    return;
+  }
+  accountType = type;
+  document.getElementById('acctDemo').classList.toggle('active', type === 'demo');
+  document.getElementById('acctReal').classList.toggle('active', type === 'real');
+  document.getElementById('dangerBanner').classList.toggle('show', type === 'real');
+  log('Account type set to ' + (type === 'demo' ? 'DEMO (virtual)' : 'REAL (live money)'), 'info');
+}
 
 // ---------------- PKCE helpers ----------------
 function base64UrlEncode(buffer) {
@@ -258,14 +291,12 @@ function base64UrlEncode(buffer) {
   for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-
 function randomString(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
   const array = new Uint8Array(length);
   crypto.getRandomValues(array);
   return Array.from(array).map(v => chars[v % chars.length]).join('');
 }
-
 async function sha256Base64Url(input) {
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
@@ -273,8 +304,6 @@ async function sha256Base64Url(input) {
   return base64UrlEncode(digest);
 }
 
-// Kick off Deriv's OAuth2 + PKCE login. Deriv handles the login/consent screen
-// itself, then redirects back to this same page with ?code=...&state=...
 async function loginWithDeriv() {
   const redirectUri = window.location.href.split('?')[0].split('#')[0];
   const codeVerifier = randomString(64);
@@ -293,13 +322,9 @@ async function loginWithDeriv() {
     code_challenge: codeChallenge,
     code_challenge_method: 'S256'
   });
-
   window.location.href = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
 }
 
-// Exchanges the authorization code Deriv sent back for an access token,
-// then connects using it. Deriv's docs say to do this exchange server-side —
-// if it's blocked by CORS, use "Connect with token" (manual PAT) instead.
 async function exchangeCodeForToken(code) {
   const redirectUri = window.location.href.split('?')[0].split('#')[0];
   const codeVerifier = sessionStorage.getItem('hl_pkce_verifier');
@@ -337,7 +362,6 @@ async function exchangeCodeForToken(code) {
   }
 }
 
-// On load, check if we've just been redirected back from Deriv's OAuth login.
 function checkOauthReturn() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
@@ -357,6 +381,7 @@ function checkOauthReturn() {
   }
 }
 
+// ---------------- Logging ----------------
 function log(message, type = 'info') {
   const logEl = document.getElementById('log');
   const entry = document.createElement('div');
@@ -374,21 +399,22 @@ function setStatus(connected, text) {
   document.getElementById('fireBtn').disabled = !connected;
 }
 
+function updateBalanceDisplay(balance, currency) {
+  const pill = document.getElementById('balancePill');
+  pill.textContent = `${Number(balance).toFixed(2)} ${currency}`;
+  pill.classList.add('live');
+}
+
 function setMode(newMode) {
   mode = newMode;
   document.getElementById('modeManual').classList.toggle('active', mode === 'manual');
   document.getElementById('modeAuto').classList.toggle('active', mode === 'auto');
   document.getElementById('fireBtn').style.display = mode === 'manual' ? 'inline-block' : 'none';
   document.getElementById('autoStopBtn').style.display = 'none';
-  if (mode === 'manual' && autoFiring) {
-    stopAuto();
-  }
+  if (mode === 'manual' && autoFiring) stopAuto();
 }
 
-// Deriv retired the old {"authorize": token} WebSocket handshake. The current flow is:
-//   1. GET  /trading/v1/options/accounts            -> list of accounts
-//   2. POST /trading/v1/options/accounts/{id}/otp    -> one-time-use WebSocket URL (valid 120s)
-//   3. Connect directly to that URL — no auth message needed after that.
+// ---------------- Connect (OTP flow) ----------------
 async function connect() {
   const token = document.getElementById('apiToken').value.trim();
   if (!token) {
@@ -396,26 +422,56 @@ async function connect() {
     return;
   }
 
-  setStatus(false, 'Fetching account...');
+  // Warn before connecting to real
+  if (accountType === 'real') {
+    const ok = confirm('You are about to connect to your REAL Deriv account.\n\nEvery trade will use real money.\n\nContinue?');
+    if (!ok) {
+      log('Real account connection cancelled.', 'info');
+      return;
+    }
+  }
+
+  setStatus(false, 'Fetching accounts...');
   try {
     const accResp = await fetch(`${API_BASE}/trading/v1/options/accounts`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Deriv-App-ID': APP_ID }
     });
     const accData = await accResp.json();
+
     if (!accResp.ok) {
       log('Account lookup failed: ' + (accData.error?.message || accResp.status), 'error');
       setStatus(false, 'Error');
       return;
     }
+
     const accounts = accData.data || accData.accounts || accData;
-    const account = Array.isArray(accounts) ? accounts[0] : accounts;
-    const accountId = account && (account.account_id || account.id);
-    if (!accountId) {
-      log('No trading account found for this token.', 'error');
+    console.log('ACCOUNTS:', accounts);
+
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      log('No accounts returned for this token.', 'error');
       setStatus(false, 'Error');
       return;
     }
 
+    // Pick account matching selected type
+    const prefix = accountType === 'demo' ? 'VRTC' : 'CR';
+    const chosen = accounts.find(a => {
+      const id = a.account_id || a.id || '';
+      return id.toUpperCase().startsWith(prefix.toUpperCase());
+    });
+
+    if (!chosen) {
+      log(`No ${accountType.toUpperCase()} account found. Available: ` +
+          accounts.map(a => (a.account_id || a.id)).join(', '), 'error');
+      setStatus(false, 'Error');
+      return;
+    }
+
+    const accountId = chosen.account_id || chosen.id;
+    connectedAccountId = accountId;
+    log(`Selected ${accountType.toUpperCase()} account: ${accountId}`, 'info');
+
+    // Request OTP
     setStatus(false, 'Requesting session...');
     const otpResp = await fetch(`${API_BASE}/trading/v1/options/accounts/${accountId}/otp`, {
       method: 'POST',
@@ -428,13 +484,20 @@ async function connect() {
       return;
     }
 
-    // OTP is single-use and expires in ~120s — connect immediately.
+    // Log endpoint type (demo/real) for verification
+    const wsEndpoint = otpData.data.url.split('?')[0];
+    console.log('Connecting to WS endpoint:', wsEndpoint);
+    log('WebSocket endpoint: ' + wsEndpoint, 'info');
+
+    // Connect
     setStatus(false, 'Connecting...');
     ws = new WebSocket(otpData.data.url);
 
     ws.onopen = () => {
-      log('Connected as ' + accountId + '.', 'info');
+      log('WebSocket open. Requesting balance...', 'info');
       setStatus(true, 'Connected — ' + accountId);
+      // Ask for balance + subscribe to updates
+      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
     };
 
     ws.onmessage = (event) => {
@@ -450,6 +513,9 @@ async function connect() {
     ws.onclose = () => {
       log('Connection closed.', 'info');
       setStatus(false, 'Disconnected');
+      document.getElementById('balancePill').classList.remove('live');
+      document.getElementById('balancePill').textContent = '— no balance —';
+      connectedAccountId = null;
     };
   } catch (err) {
     log('Connection failed — see console.', 'error');
@@ -458,24 +524,39 @@ async function connect() {
   }
 }
 
+// ---------------- Message router ----------------
 function handleMessage(data) {
   if (data.error) {
-    log('API error: ' + data.error.message, 'error');
+    log('API error: ' + (data.error.message || JSON.stringify(data.error)), 'error');
     return;
   }
 
   switch (data.msg_type) {
+    case 'balance': {
+      const b = data.balance || data;
+      if (b && (b.balance !== undefined)) {
+        updateBalanceDisplay(b.balance, b.currency || 'USD');
+        log(`Balance: ${Number(b.balance).toFixed(2)} ${b.currency || 'USD'}`, 'balance');
+      }
+      break;
+    }
+
     case 'authorize':
       log('Authorized as ' + data.authorize.loginid + '.', 'info');
-      setStatus(true, 'Connected — ' + data.authorize.loginid);
       break;
 
-    case 'buy':
-      const contractType = data.echo_req.parameters.contract_type;
-      const cls = contractType === 'CALL' ? 'buy' : 'sell';
-      log((contractType === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
-          ' placed — contract ' + data.buy.contract_id + ', buy price ' + data.buy.buy_price, cls);
+    case 'buy': {
+      try {
+        const ct = data.echo_req?.parameters?.contract_type || 'UNKNOWN';
+        const cls = ct === 'CALL' ? 'buy' : 'sell';
+        log((ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
+            ' placed — contract ' + data.buy.contract_id +
+            ', buy price ' + data.buy.buy_price, cls);
+      } catch (e) {
+        log('Buy response received (unparsed).', 'info');
+      }
       break;
+    }
 
     case 'tick':
       if (mode === 'auto' && autoFiring) {
@@ -487,21 +568,22 @@ function handleMessage(data) {
       break;
 
     default:
+      // Uncomment for verbose debugging:
+      // console.log('Unhandled msg:', data);
       break;
   }
 }
 
+// ---------------- Tick subscription ----------------
 function subscribeToTicks(symbol) {
   ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
   currentSymbol = symbol;
 }
-
 function unsubscribeTicks() {
-  if (currentSymbol) {
-    ws.send(JSON.stringify({ forget_all: 'ticks' }));
-  }
+  if (currentSymbol) ws.send(JSON.stringify({ forget_all: 'ticks' }));
 }
 
+// ---------------- Trade logic ----------------
 function buildBuyRequest(contractType, stake, symbol, duration) {
   return {
     buy: 1,
@@ -524,29 +606,28 @@ function sendTradePair(referencePrice) {
   const sellStake = parseFloat(document.getElementById('sellStake').value);
   const duration = parseInt(document.getElementById('duration').value, 10);
 
-  if (!isConnected) {
-    log('Not connected.', 'error');
-    return;
-  }
+  if (!isConnected) { log('Not connected.', 'error'); return; }
 
   const higherReq = buildBuyRequest('CALL', buyStake, symbol, duration);
-  const lowerReq = buildBuyRequest('PUT', sellStake, symbol, duration);
+  const lowerReq  = buildBuyRequest('PUT',  sellStake, symbol, duration);
 
-  // Fire both immediately, back-to-back, without waiting on either response,
-  // so both orders go out while the current tick/price is still fresh.
   ws.send(JSON.stringify(higherReq));
   ws.send(JSON.stringify(lowerReq));
 
-  log('Fired pair at reference price ' + referencePrice + ' — Buy $' + buyStake + ' / Sell $' + sellStake + ', duration ' + duration + ' ticks.', 'info');
+  const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
+  log('Fired pair' + tag + ' at ref price ' + referencePrice +
+      ' — Buy $' + buyStake + ' / Sell $' + sellStake +
+      ', duration ' + duration + ' ticks.', 'info');
 }
 
 function fireTrade() {
+  if (!isConnected) return;
   const symbol = document.getElementById('symbol').value;
-  // For manual mode, request a single current tick as the reference, then fire.
   ws.send(JSON.stringify({ ticks: symbol }));
+
   const handler = (event) => {
     const data = JSON.parse(event.data);
-    if (data.msg_type === 'tick') {
+    if (data.msg_type === 'tick' && data.tick && data.tick.symbol === symbol) {
       sendTradePair(data.tick.quote);
       ws.removeEventListener('message', handler);
     }
@@ -559,7 +640,7 @@ function startAutoOnSymbol() {
   subscribeToTicks(symbol);
   autoFiring = true;
   document.getElementById('autoStopBtn').style.display = 'inline-block';
-  log('Auto-firing enabled on ' + symbol + '. A new pair fires on every tick.', 'info');
+  log('Auto-firing enabled on ' + symbol + '. New pair fires on every tick.', 'info');
 }
 
 function stopAuto() {
@@ -569,7 +650,6 @@ function stopAuto() {
   log('Auto-firing stopped.', 'info');
 }
 
-// Wire up auto mode start when toggled
 document.getElementById('modeAuto').addEventListener('click', () => {
   if (isConnected) startAutoOnSymbol();
 });

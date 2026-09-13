@@ -245,6 +245,7 @@
     <div class="status-bar" style="margin-top: 12px;">
       <div class="dot" id="statusDot"></div>
       <span id="statusText">Disconnected</span>
+      <button class="btn-mini" id="disconnectBtn" onclick="disconnect()" style="display:none;">Disconnect</button>
       <span class="balance-pill" id="balancePill">— no balance —</span>
     </div>
   </div>
@@ -392,6 +393,7 @@ function setStatus(connected, text) {
   isConnected = connected;
   document.getElementById('statusDot').classList.toggle('connected', connected);
   document.getElementById('statusText').textContent = text;
+  document.getElementById('disconnectBtn').style.display = connected ? 'inline-block' : 'none';
   updateButtonStates();
 }
 function updateBalanceDisplay(balance, currency) {
@@ -423,6 +425,23 @@ function updateButtonStates() {
     startBtn.style.display = 'inline-block';
     stopBtn.style.display = running ? 'inline-block' : 'none';
   }
+}
+
+function disconnect() {
+  if (running) stopEngine();
+  if (subscribedTicks && ws) {
+    try { ws.send(JSON.stringify({ forget_all: 'ticks' })); } catch (e) {}
+    subscribedTicks = false;
+  }
+  if (ws) {
+    try { ws.close(); } catch (e) {}
+  }
+  ws = null;
+  connectedAccountId = null;
+  setStatus(false, 'Disconnected');
+  document.getElementById('balancePill').classList.remove('live');
+  document.getElementById('balancePill').textContent = '— no balance —';
+  log('Disconnected manually. You can now switch account type.', 'info');
 }
 
 function setAccountType(type) {
@@ -704,7 +723,7 @@ function startEngine() {
 function stopEngine() {
   if (!running) return;
   running = false;
-  if (subscribedTicks) { ws.send(JSON.stringify({ forget_all: 'ticks' })); subscribedTicks = false; }
+  if (subscribedTicks && ws) { ws.send(JSON.stringify({ forget_all: 'ticks' })); subscribedTicks = false; }
   log('Engine stopped.', 'info');
   updateButtonStates();
 }

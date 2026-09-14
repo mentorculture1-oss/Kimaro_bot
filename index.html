@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deriv Higher/Lower Bot</title>
+<title>Deriv Higher/Lower Pair Bot</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -23,7 +23,7 @@
     color: var(--text);
     padding: 20px;
   }
-  .container { max-width: 760px; margin: 0 auto; }
+  .container { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px 0; }
   .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
   .panel {
@@ -41,22 +41,10 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-  .panel-header h2 { margin: 0; }
-  .btn-mini {
-    padding: 5px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: #0d1117;
-    color: var(--muted);
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .btn-mini:hover { color: var(--text); border-color: var(--accent); }
   .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
   .field { flex: 1; min-width: 140px; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-  input, select {
+  input {
     width: 100%;
     padding: 9px 10px;
     background: #0d1117;
@@ -65,7 +53,7 @@
     color: var(--text);
     font-size: 14px;
   }
-  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input:focus { outline: none; border-color: var(--accent); }
   .btn {
     padding: 10px 18px;
     border: none;
@@ -79,9 +67,16 @@
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-connect { background: var(--accent); color: white; }
   .btn-fire { background: var(--buy); color: white; }
-  .btn-stop { background: var(--sell); color: white; }
-  .btn-buy { background: var(--buy); color: white; }
-  .btn-sell { background: var(--sell); color: white; }
+  .btn-mini {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #0d1117;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-mini:hover { color: var(--text); border-color: var(--accent); }
   .status-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sell); }
   .dot.connected { background: var(--buy); }
@@ -96,13 +91,12 @@
     color: var(--muted);
   }
   .balance-pill.live { color: var(--buy); border-color: rgba(38,169,105,0.4); }
-  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .log {
     background: #0d1117;
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;
-    height: 320px;
+    height: 300px;
     overflow-y: auto;
     font-family: ui-monospace, 'SF Mono', Consolas, monospace;
     font-size: 12.5px;
@@ -113,37 +107,10 @@
   .log-sell { color: var(--sell); }
   .log-info { color: var(--muted); }
   .log-error { color: #f59e0b; }
-  .log-balance { color: #3b82f6; font-weight: 600; }
   .log-win { color: #26a969; font-weight: 700; }
   .log-loss { color: #d9534f; font-weight: 700; }
-  .log-signal { color: #a78bfa; }
-  .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
-  .toggle-btn {
-    flex: 1;
-    padding: 9px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: #0d1117;
-    color: var(--muted);
-    font-size: 12.5px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.15s;
-  }
-  .toggle-btn.active {
-    border-color: var(--accent);
-    color: var(--text);
-    background: rgba(59,130,246,0.12);
-  }
-  .warning {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 8px;
-    padding: 10px;
-    background: rgba(245,158,11,0.08);
-    border: 1px solid rgba(245,158,11,0.25);
-    border-radius: 6px;
-  }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .panel-header h2 { margin: 0; }
   .danger-banner {
     display: none;
     margin-top: 10px;
@@ -181,42 +148,12 @@
     background: rgba(217,83,79,0.15);
     color: #ff8b87;
   }
-  .stats-bar {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-  .stat {
-    background: #0d1117;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 8px;
-    text-align: center;
-  }
-  .stat-label {
-    font-size: 10px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 4px;
-  }
-  .stat-value {
-    font-size: 16px;
-    font-weight: 700;
-    font-family: ui-monospace, monospace;
-    color: var(--text);
-  }
-  .stat-value.win { color: var(--buy); }
-  .stat-value.loss { color: var(--sell); }
-  .stat-value.neutral { color: var(--muted); }
-  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Deriv Higher / Lower Bot</h1>
-  <div class="subtitle">Pair-mode diagnostics + single-direction signal trading</div>
+  <h1>Higher / Lower Pair Bot</h1>
+  <div class="subtitle">Fires CALL + PUT simultaneously — $2 each, 10 ticks</div>
 
   <div class="panel">
     <h2>Connection</h2>
@@ -255,80 +192,20 @@
     <div class="row">
       <div class="field">
         <label>Symbol</label>
-        <select id="symbol">
-          <option value="R_10">Volatility 10 Index</option>
-          <option value="R_25">Volatility 25 Index</option>
-          <option value="R_50">Volatility 50 Index</option>
-          <option value="R_75">Volatility 75 Index</option>
-          <option value="R_100">Volatility 100 Index</option>
-          <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
-          <option value="1HZ100V">Volatility 100 (1s) Index</option>
-        </select>
+        <input type="text" id="symbol" value="1HZ10V">
       </div>
       <div class="field">
-        <label>Stake (USD)</label>
-        <input type="number" id="stake" value="0.35" min="0.35" step="0.01">
+        <label>Stake per side (USD)</label>
+        <input type="number" id="stake" value="2" min="0.35" step="0.01">
       </div>
       <div class="field">
         <label>Duration (ticks)</label>
-        <input type="number" id="duration" value="5" min="1" step="1">
+        <input type="number" id="duration" value="10" min="1" step="1">
       </div>
     </div>
 
-    <label style="margin-bottom: 8px;">Trade Mode</label>
-    <div class="toggle-row">
-      <div class="toggle-btn" id="modeBoth"  onclick="setTradeMode('both')">🎯 Both Directions (pair)</div>
-      <div class="toggle-btn active" id="modeSignal" onclick="setTradeMode('signal')">📈 Auto Signal (single)</div>
-      <div class="toggle-btn" id="modeManual" onclick="setTradeMode('manual')">🖐 Manual Direction</div>
-    </div>
-
-    <div id="signalSettings" class="row">
-      <div class="field">
-        <label>Signal: look at last N ticks</label>
-        <input type="number" id="signalLookback" value="3" min="2" max="10" step="1">
-      </div>
-      <div class="field">
-        <label>Cooldown (ticks after a trade)</label>
-        <input type="number" id="signalCooldown" value="5" min="0" max="50" step="1">
-      </div>
-    </div>
-
-    <div class="actions" style="margin-top: 10px;">
-      <button class="btn btn-fire" id="startBtn" onclick="startEngine()" disabled>▶ Start</button>
-      <button class="btn btn-stop" id="stopBtn" onclick="stopEngine()" style="display:none;">■ Stop</button>
-      <button class="btn btn-buy hidden" id="manualBuyBtn" onclick="manualTrade('CALL')" disabled>BUY (Higher)</button>
-      <button class="btn btn-sell hidden" id="manualSellBtn" onclick="manualTrade('PUT')" disabled>SELL (Lower)</button>
-    </div>
-
-    <div class="warning" id="modeWarning"></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-header">
-      <h2>Session Stats</h2>
-      <button class="btn-mini" onclick="resetStats()">Reset Stats</button>
-    </div>
-    <div class="stats-bar">
-      <div class="stat">
-        <div class="stat-label">Trades</div>
-        <div class="stat-value" id="statTotal">0</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Wins</div>
-        <div class="stat-value win" id="statWins">0</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Losses</div>
-        <div class="stat-value loss" id="statLosses">0</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Win %</div>
-        <div class="stat-value neutral" id="statWinRate">0%</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Net P&L</div>
-        <div class="stat-value neutral" id="statPnL">0.00</div>
-      </div>
+    <div style="margin-top: 10px;">
+      <button class="btn btn-fire" id="fireBtn" onclick="firePair()" disabled>Fire Pair (CALL + PUT)</button>
     </div>
   </div>
 
@@ -347,18 +224,8 @@ let isConnected = false;
 let accountType = 'demo';
 let connectedAccountId = null;
 
-let tradeMode = 'signal';
-let running = false;
-let subscribedTicks = false;
-
-const tickHistory = [];
-let cooldownRemaining = 0;
-let lastSignalDir = null;
-
 const pendingContracts = {};
 const pendingPairMeta = [];
-
-const stats = { total: 0, wins: 0, losses: 0, pnl: 0 };
 
 function log(message, type = 'info') {
   const logEl = document.getElementById('log');
@@ -373,75 +240,27 @@ function clearLog() {
   document.getElementById('log').innerHTML = '';
   log('Activity log cleared.', 'info');
 }
-function refreshStatsUI() {
-  document.getElementById('statTotal').textContent = stats.total;
-  document.getElementById('statWins').textContent = stats.wins;
-  document.getElementById('statLosses').textContent = stats.losses;
-  const rate = stats.total ? Math.round((stats.wins / stats.total) * 100) : 0;
-  document.getElementById('statWinRate').textContent = rate + '%';
-  const pnlEl = document.getElementById('statPnL');
-  pnlEl.textContent = (stats.pnl >= 0 ? '+' : '') + stats.pnl.toFixed(2);
-  pnlEl.classList.remove('win', 'loss', 'neutral');
-  pnlEl.classList.add(stats.pnl > 0 ? 'win' : stats.pnl < 0 ? 'loss' : 'neutral');
-}
-function resetStats() {
-  stats.total = 0; stats.wins = 0; stats.losses = 0; stats.pnl = 0;
-  refreshStatsUI();
-  log('Session stats reset.', 'info');
-}
 function setStatus(connected, text) {
   isConnected = connected;
   document.getElementById('statusDot').classList.toggle('connected', connected);
   document.getElementById('statusText').textContent = text;
+  document.getElementById('fireBtn').disabled = !connected;
   document.getElementById('disconnectBtn').style.display = connected ? 'inline-block' : 'none';
-  updateButtonStates();
 }
 function updateBalanceDisplay(balance, currency) {
   const pill = document.getElementById('balancePill');
   pill.textContent = `${Number(balance).toFixed(2)} ${currency}`;
   pill.classList.add('live');
 }
-function updateButtonStates() {
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const manualBuy = document.getElementById('manualBuyBtn');
-  const manualSell = document.getElementById('manualSellBtn');
-
-  startBtn.disabled = !isConnected || running;
-  stopBtn.disabled = !running;
-
-  const manual = tradeMode === 'manual';
-  manualBuy.disabled = !isConnected || !manual;
-  manualSell.disabled = !isConnected || !manual;
-
-  if (manual && isConnected) {
-    manualBuy.style.display = 'inline-block';
-    manualSell.style.display = 'inline-block';
-    startBtn.style.display = 'none';
-    stopBtn.style.display = 'none';
-  } else {
-    manualBuy.style.display = 'none';
-    manualSell.style.display = 'none';
-    startBtn.style.display = 'inline-block';
-    stopBtn.style.display = running ? 'inline-block' : 'none';
-  }
-}
 
 function disconnect() {
-  if (running) stopEngine();
-  if (subscribedTicks && ws) {
-    try { ws.send(JSON.stringify({ forget_all: 'ticks' })); } catch (e) {}
-    subscribedTicks = false;
-  }
-  if (ws) {
-    try { ws.close(); } catch (e) {}
-  }
+  if (ws) { try { ws.close(); } catch (e) {} }
   ws = null;
   connectedAccountId = null;
   setStatus(false, 'Disconnected');
   document.getElementById('balancePill').classList.remove('live');
   document.getElementById('balancePill').textContent = '— no balance —';
-  log('Disconnected manually. You can now switch account type.', 'info');
+  log('Disconnected. You can now switch account type.', 'info');
 }
 
 function setAccountType(type) {
@@ -450,27 +269,6 @@ function setAccountType(type) {
   document.getElementById('acctDemo').classList.toggle('active', type === 'demo');
   document.getElementById('acctReal').classList.toggle('active', type === 'real');
   document.getElementById('dangerBanner').classList.toggle('show', type === 'real');
-}
-
-function setTradeMode(m) {
-  if (running) { log('Stop the engine before switching modes.', 'error'); return; }
-  tradeMode = m;
-  document.getElementById('modeBoth').classList.toggle('active', m === 'both');
-  document.getElementById('modeSignal').classList.toggle('active', m === 'signal');
-  document.getElementById('modeManual').classList.toggle('active', m === 'manual');
-
-  document.getElementById('signalSettings').style.display = (m === 'signal') ? 'flex' : 'none';
-
-  const w = document.getElementById('modeWarning');
-  if (m === 'both') {
-    w.textContent = 'Pair mode: fires CALL + PUT every tick. Diagnostic only — this loses the spread by design.';
-  } else if (m === 'signal') {
-    w.textContent = 'Auto Signal: fires one trade when the last N ticks all move in the same direction. Cooldown prevents rapid-fire entries.';
-  } else {
-    w.textContent = 'Manual Direction: you click BUY or SELL to fire one trade at the current tick.';
-  }
-
-  updateButtonStates();
 }
 
 function base64UrlEncode(buffer) {
@@ -515,6 +313,7 @@ async function loginWithDeriv() {
   });
   window.location.href = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
 }
+
 async function exchangeCodeForToken(code) {
   const redirectUri = window.location.href.split('?')[0].split('#')[0];
   const codeVerifier = sessionStorage.getItem('hl_pkce_verifier');
@@ -547,6 +346,7 @@ async function exchangeCodeForToken(code) {
     log('Token exchange failed — use "Connect with token" instead.', 'error');
   }
 }
+
 function checkOauthReturn() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
@@ -629,8 +429,6 @@ async function connect() {
     ws.onclose = () => {
       log('Connection closed.', 'info');
       setStatus(false, 'Disconnected');
-      running = false;
-      updateButtonStates();
       document.getElementById('balancePill').classList.remove('live');
       document.getElementById('balancePill').textContent = '— no balance —';
     };
@@ -665,7 +463,8 @@ function handleMessage(data) {
         };
         const ct = pendingContracts[cid].contractType;
         log((ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
-            ` placed — contract ${cid}, price ${data.buy.buy_price}`, ct === 'CALL' ? 'buy' : 'sell');
+            ` placed — contract ${cid}, price ${data.buy.buy_price}`,
+            ct === 'CALL' ? 'buy' : 'sell');
         ws.send(JSON.stringify({
           proposal_open_contract: 1,
           contract_id: cid,
@@ -685,88 +484,15 @@ function handleMessage(data) {
 
       const profit = parseFloat(c.profit);
       const ct = meta.contractType;
-      stats.total++; stats.pnl += profit;
-      if (profit > 0) stats.wins++; else stats.losses++;
-      refreshStatsUI();
-
       const tag = accountType === 'real' ? '[REAL]' : '[DEMO]';
       const label = ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)';
       const outcome = profit > 0 ? 'WON' : 'LOST';
       log(`${outcome} ${tag} ${label} — #${cid}, stake $${meta.stake.toFixed(2)}, ` +
-          `P&L ${profit >= 0 ? '+' : ''}${profit.toFixed(2)} | ` +
-          `Session ${stats.total} trades ${stats.wins}W/${stats.losses}L P&L ${stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}`,
+          `P&L ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
           profit > 0 ? 'win' : 'loss');
 
       ws.send(JSON.stringify({ forget: data.proposal_open_contract.id }));
       break;
-    }
-
-    case 'tick':
-      onTick(data.tick);
-      break;
-  }
-}
-
-function startEngine() {
-  if (!isConnected || running) return;
-  if (tradeMode === 'manual') return;
-  const sym = document.getElementById('symbol').value;
-  ws.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
-  subscribedTicks = true;
-  running = true;
-  tickHistory.length = 0;
-  cooldownRemaining = 0;
-  lastSignalDir = null;
-  log(`Engine started — mode: ${tradeMode}, symbol: ${sym}`, 'info');
-  updateButtonStates();
-}
-function stopEngine() {
-  if (!running) return;
-  running = false;
-  if (subscribedTicks && ws) { ws.send(JSON.stringify({ forget_all: 'ticks' })); subscribedTicks = false; }
-  log('Engine stopped.', 'info');
-  updateButtonStates();
-}
-
-function onTick(tick) {
-  if (!tick) return;
-  tickHistory.push({ quote: parseFloat(tick.quote), epoch: tick.epoch });
-  if (tickHistory.length > 50) tickHistory.shift();
-
-  if (!running) return;
-
-  if (cooldownRemaining > 0) cooldownRemaining--;
-
-  if (tradeMode === 'both') {
-    firePair(tick.quote);
-    return;
-  }
-
-  if (tradeMode === 'signal') {
-    if (cooldownRemaining > 0) return;
-    const lookback = parseInt(document.getElementById('signalLookback').value, 10);
-    if (tickHistory.length < lookback + 1) return;
-
-    let up = 0, down = 0;
-    for (let i = tickHistory.length - lookback; i < tickHistory.length; i++) {
-      const prev = tickHistory[i - 1].quote;
-      const cur = tickHistory[i].quote;
-      if (cur > prev) up++;
-      else if (cur < prev) down++;
-    }
-
-    let dir = null;
-    if (up === lookback) dir = 'CALL';
-    else if (down === lookback) dir = 'PUT';
-
-    if (dir) {
-      const reason = dir === 'CALL'
-        ? `${lookback} up ticks in a row`
-        : `${lookback} down ticks in a row`;
-      log(`Signal: ${dir === 'CALL' ? 'BUY' : 'SELL'} (${reason})`, 'signal');
-      fireSingle(dir, tick.quote);
-      lastSignalDir = dir;
-      cooldownRemaining = parseInt(document.getElementById('signalCooldown').value, 10);
     }
   }
 }
@@ -787,10 +513,15 @@ function buildBuyRequest(contractType, stake, symbol, duration) {
   };
 }
 
-function firePair(refPrice) {
-  const symbol = document.getElementById('symbol').value;
+function firePair() {
+  if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
+  const symbol = document.getElementById('symbol').value.trim();
   const stake = parseFloat(document.getElementById('stake').value);
   const duration = parseInt(document.getElementById('duration').value, 10);
+
+  if (!symbol) { log('Symbol is empty.', 'error'); return; }
+  if (isNaN(stake) || stake < 0.35) { log('Stake must be at least 0.35.', 'error'); return; }
+  if (isNaN(duration) || duration < 1) { log('Duration must be at least 1 tick.', 'error'); return; }
 
   pendingPairMeta.push({ contractType: 'CALL', stake });
   pendingPairMeta.push({ contractType: 'PUT',  stake });
@@ -799,38 +530,10 @@ function firePair(refPrice) {
   ws.send(JSON.stringify(buildBuyRequest('PUT',  stake, symbol, duration)));
 
   const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Fired PAIR${tag} at ${refPrice} — stake $${stake} x2, ${duration} ticks`, 'info');
-}
-
-function fireSingle(contractType, refPrice) {
-  const symbol = document.getElementById('symbol').value;
-  const stake = parseFloat(document.getElementById('stake').value);
-  const duration = parseInt(document.getElementById('duration').value, 10);
-
-  pendingPairMeta.push({ contractType, stake });
-  ws.send(JSON.stringify(buildBuyRequest(contractType, stake, symbol, duration)));
-
-  const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Fired SINGLE ${contractType}${tag} at ${refPrice} — stake $${stake}, ${duration} ticks`, 'info');
-}
-
-function manualTrade(contractType) {
-  if (!isConnected || tradeMode !== 'manual') return;
-  const symbol = document.getElementById('symbol').value;
-  ws.send(JSON.stringify({ ticks: symbol }));
-  const handler = (event) => {
-    const d = JSON.parse(event.data);
-    if (d.msg_type === 'tick' && d.tick && d.tick.symbol === symbol) {
-      fireSingle(contractType, d.tick.quote);
-      ws.removeEventListener('message', handler);
-    }
-  };
-  ws.addEventListener('message', handler);
+  log(`Fired PAIR${tag} — ${symbol}, stake $${stake} x2, ${duration} ticks`, 'info');
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  setTradeMode('signal');
-  refreshStatsUI();
   checkOauthReturn();
 });
 </script>

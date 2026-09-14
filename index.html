@@ -212,43 +212,94 @@
 
   <div class="panel">
     <h2>Trade Settings</h2>
-    <div class="row">
-      <div class="field">
-        <label>Market</label>
-        <select id="symbol">
-          <option value="R_10">Volatility 10 Index</option>
-          <option value="R_25">Volatility 25 Index</option>
-          <option value="R_50">Volatility 50 Index</option>
-          <option value="R_75">Volatility 75 Index</option>
-          <option value="R_100">Volatility 100 Index</option>
-          <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
-          <option value="1HZ25V">Volatility 25 (1s) Index</option>
-          <option value="1HZ50V">Volatility 50 (1s) Index</option>
-          <option value="1HZ75V">Volatility 75 (1s) Index</option>
-          <option value="1HZ100V">Volatility 100 (1s) Index</option>
-          <option value="BOOM500">Boom 500 Index</option>
-          <option value="BOOM1000">Boom 1000 Index</option>
-          <option value="CRASH500">Crash 500 Index</option>
-          <option value="CRASH1000">Crash 1000 Index</option>
-          <option value="stpRNG">Step Index</option>
-          <option value="JD10">Jump 10 Index</option>
-          <option value="JD25">Jump 25 Index</option>
-          <option value="JD50">Jump 50 Index</option>
-          <option value="JD75">Jump 75 Index</option>
-          <option value="JD100">Jump 100 Index</option>
-        </select>
+
+    <div style="display:flex; gap:18px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:230px;">
+        <div style="font-weight:700; color: var(--buy); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.04em; font-size:13px;">Higher (Call)</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Market / Instrument</label>
+          <select id="symbolHigher">
+            <option value="R_10">Volatility 10 Index</option>
+            <option value="R_25">Volatility 25 Index</option>
+            <option value="R_50">Volatility 50 Index</option>
+            <option value="R_75">Volatility 75 Index</option>
+            <option value="R_100">Volatility 100 Index</option>
+            <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
+            <option value="1HZ25V">Volatility 25 (1s) Index</option>
+            <option value="1HZ50V">Volatility 50 (1s) Index</option>
+            <option value="1HZ75V">Volatility 75 (1s) Index</option>
+            <option value="1HZ100V">Volatility 100 (1s) Index</option>
+            <option value="BOOM500">Boom 500 Index</option>
+            <option value="BOOM1000">Boom 1000 Index</option>
+            <option value="CRASH500">Crash 500 Index</option>
+            <option value="CRASH1000">Crash 1000 Index</option>
+            <option value="stpRNG">Step Index</option>
+            <option value="JD10">Jump 10 Index</option>
+            <option value="JD25">Jump 25 Index</option>
+            <option value="JD50">Jump 50 Index</option>
+            <option value="JD75">Jump 75 Index</option>
+            <option value="JD100">Jump 100 Index</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Adjust Stake (USD)</label>
+          <input type="number" id="stakeHigher" value="2" min="0.35" step="0.01">
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Duration Adjust (ticks)</label>
+          <input type="number" id="durationHigher" value="10" min="1" step="1">
+        </div>
+        <div class="field">
+          <label>Adjust Barrier (required)</label>
+          <input type="text" id="barrierHigher" placeholder="e.g. +0.10">
+        </div>
       </div>
-      <div class="field">
-        <label>Stake per side (USD)</label>
-        <input type="number" id="stake" value="2" min="0.35" step="0.01">
-      </div>
-      <div class="field">
-        <label>Duration (ticks)</label>
-        <input type="number" id="duration" value="10" min="1" step="1">
+
+      <div style="width:1px; background: var(--border); align-self: stretch;"></div>
+
+      <div style="flex:1; min-width:230px;">
+        <div style="font-weight:700; color: var(--sell); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.04em; font-size:13px;">Lower (Put)</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Market / Instrument</label>
+          <select id="symbolLower">
+            <option value="R_10">Volatility 10 Index</option>
+            <option value="R_25">Volatility 25 Index</option>
+            <option value="R_50">Volatility 50 Index</option>
+            <option value="R_75">Volatility 75 Index</option>
+            <option value="R_100">Volatility 100 Index</option>
+            <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
+            <option value="1HZ25V">Volatility 25 (1s) Index</option>
+            <option value="1HZ50V">Volatility 50 (1s) Index</option>
+            <option value="1HZ75V">Volatility 75 (1s) Index</option>
+            <option value="1HZ100V">Volatility 100 (1s) Index</option>
+            <option value="BOOM500">Boom 500 Index</option>
+            <option value="BOOM1000">Boom 1000 Index</option>
+            <option value="CRASH500">Crash 500 Index</option>
+            <option value="CRASH1000">Crash 1000 Index</option>
+            <option value="stpRNG">Step Index</option>
+            <option value="JD10">Jump 10 Index</option>
+            <option value="JD25">Jump 25 Index</option>
+            <option value="JD50">Jump 50 Index</option>
+            <option value="JD75">Jump 75 Index</option>
+            <option value="JD100">Jump 100 Index</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Adjust Stake (USD)</label>
+          <input type="number" id="stakeLower" value="2" min="0.35" step="0.01">
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Duration Adjust (ticks)</label>
+          <input type="number" id="durationLower" value="10" min="1" step="1">
+        </div>
+        <div class="field">
+          <label>Adjust Barrier (required)</label>
+          <input type="text" id="barrierLower" placeholder="e.g. -0.10">
+        </div>
       </div>
     </div>
 
-    <div style="margin-top: 10px;">
+    <div style="margin-top: 14px;">
       <button class="btn btn-fire" id="startBtn" onclick="startEngine()" disabled>▶ Start Engine</button>
       <button class="btn btn-stop" id="stopBtn" onclick="stopEngine()" style="display:none;">■ Stop Engine</button>
       <button class="btn btn-connect" id="fireOnceBtn" onclick="firePair()" disabled style="margin-left: 8px;">Fire Once</button>
@@ -515,11 +566,17 @@ async function connect() {
 
 function startEngine() {
   if (!isConnected || running) return;
-  const symbol = document.getElementById('symbol').value;
+  const barrierHigher = document.getElementById('barrierHigher').value.trim();
+  const barrierLower = document.getElementById('barrierLower').value.trim();
+  if (!barrierHigher || !barrierLower) {
+    log('Enter a barrier for both Higher and Lower before starting the engine.', 'error');
+    return;
+  }
+  const symbol = document.getElementById('symbolHigher').value;
   ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
   subscribedSymbol = symbol;
   running = true;
-  log(`Engine STARTED — market: ${symbol}`, 'cycle');
+  log(`Engine STARTED — reference feed: ${symbol}`, 'cycle');
   log('Firing first pair...', 'info');
   firePair();
   updateButtons();
@@ -604,19 +661,21 @@ function handleMessage(data) {
   }
 }
 
-function buildBuyRequest(contractType, stake, symbol, duration) {
+function buildBuyRequest(contractType, stake, symbol, duration, barrier) {
+  const parameters = {
+    amount: stake,
+    basis: 'stake',
+    contract_type: contractType,
+    currency: 'USD',
+    duration: duration,
+    duration_unit: 't',
+    underlying_symbol: symbol
+  };
+  if (barrier) parameters.barrier = barrier;
   return {
     buy: 1,
     price: stake,
-    parameters: {
-      amount: stake,
-      basis: 'stake',
-      contract_type: contractType,
-      currency: 'USD',
-      duration: duration,
-      duration_unit: 't',
-      underlying_symbol: symbol
-    }
+    parameters: parameters
   };
 }
 
@@ -624,24 +683,35 @@ function firePair() {
   if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
   if (pairInFlight) return;
 
-  const symbol = document.getElementById('symbol').value;
-  const stake = parseFloat(document.getElementById('stake').value);
-  const duration = parseInt(document.getElementById('duration').value, 10);
+  const symbolHigher = document.getElementById('symbolHigher').value;
+  const stakeHigher = parseFloat(document.getElementById('stakeHigher').value);
+  const durationHigher = parseInt(document.getElementById('durationHigher').value, 10);
+  const barrierHigher = document.getElementById('barrierHigher').value.trim();
 
-  if (isNaN(stake) || stake < 0.35) { log('Stake must be at least 0.35.', 'error'); return; }
-  if (isNaN(duration) || duration < 1) { log('Duration must be at least 1 tick.', 'error'); return; }
+  const symbolLower = document.getElementById('symbolLower').value;
+  const stakeLower = parseFloat(document.getElementById('stakeLower').value);
+  const durationLower = parseInt(document.getElementById('durationLower').value, 10);
+  const barrierLower = document.getElementById('barrierLower').value.trim();
+
+  if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
+  if (isNaN(durationHigher) || durationHigher < 1) { log('Higher duration must be at least 1 tick.', 'error'); return; }
+  if (!barrierHigher) { log('Higher barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
+  if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
+  if (isNaN(durationLower) || durationLower < 1) { log('Lower duration must be at least 1 tick.', 'error'); return; }
+  if (!barrierLower) { log('Lower barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
 
   pairInFlight = true;
   updateButtons();
 
-  pendingPairMeta.push({ contractType: 'CALL', stake });
-  pendingPairMeta.push({ contractType: 'PUT',  stake });
+  pendingPairMeta.push({ contractType: 'CALL', stake: stakeHigher });
+  pendingPairMeta.push({ contractType: 'PUT',  stake: stakeLower });
 
-  ws.send(JSON.stringify(buildBuyRequest('CALL', stake, symbol, duration)));
-  ws.send(JSON.stringify(buildBuyRequest('PUT',  stake, symbol, duration)));
+  ws.send(JSON.stringify(buildBuyRequest('CALL', stakeHigher, symbolHigher, durationHigher, barrierHigher)));
+  ws.send(JSON.stringify(buildBuyRequest('PUT',  stakeLower, symbolLower, durationLower, barrierLower)));
 
   const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Fired PAIR${tag} — ${symbol}, stake $${stake} x2, ${duration} ticks`, 'info');
+  log(`Fired PAIR${tag} — Higher: ${symbolHigher} $${stakeHigher}, ${durationHigher}t${barrierHigher ? ', barrier ' + barrierHigher : ''} | ` +
+      `Lower: ${symbolLower} $${stakeLower}, ${durationLower}t${barrierLower ? ', barrier ' + barrierLower : ''}`, 'info');
 }
 
 window.addEventListener('DOMContentLoaded', () => {

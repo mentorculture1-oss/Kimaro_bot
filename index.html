@@ -44,7 +44,7 @@
   .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
   .field { flex: 1; min-width: 140px; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-  input {
+  input, select {
     width: 100%;
     padding: 9px 10px;
     background: #0d1117;
@@ -53,7 +53,7 @@
     color: var(--text);
     font-size: 14px;
   }
-  input:focus { outline: none; border-color: var(--accent); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
   .btn {
     padding: 10px 18px;
     border: none;
@@ -67,6 +67,7 @@
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-connect { background: var(--accent); color: white; }
   .btn-fire { background: var(--buy); color: white; }
+  .btn-stop { background: var(--sell); color: white; }
   .btn-mini {
     padding: 5px 12px;
     border-radius: 6px;
@@ -148,12 +149,33 @@
     background: rgba(217,83,79,0.15);
     color: #ff8b87;
   }
+  .engine-indicator {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: #0d1117;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    margin-left: 8px;
+  }
+  .engine-indicator.running {
+    color: #ff8b87;
+    border-color: rgba(217,83,79,0.6);
+    background: rgba(217,83,79,0.15);
+  }
+  .engine-indicator.running::before {
+    content: "● ";
+    color: #d9534f;
+  }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>Higher / Lower Pair Bot</h1>
-  <div class="subtitle">Fires CALL + PUT simultaneously — $2 each, 10 ticks</div>
+  <div class="subtitle">Fires CALL + PUT simultaneously on every tick</div>
 
   <div class="panel">
     <h2>Connection</h2>
@@ -191,8 +213,29 @@
     <h2>Trade Settings</h2>
     <div class="row">
       <div class="field">
-        <label>Symbol</label>
-        <input type="text" id="symbol" value="1HZ10V">
+        <label>Market</label>
+        <select id="symbol">
+          <option value="R_10">Volatility 10 Index</option>
+          <option value="R_25">Volatility 25 Index</option>
+          <option value="R_50">Volatility 50 Index</option>
+          <option value="R_75">Volatility 75 Index</option>
+          <option value="R_100">Volatility 100 Index</option>
+          <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
+          <option value="1HZ25V">Volatility 25 (1s) Index</option>
+          <option value="1HZ50V">Volatility 50 (1s) Index</option>
+          <option value="1HZ75V">Volatility 75 (1s) Index</option>
+          <option value="1HZ100V">Volatility 100 (1s) Index</option>
+          <option value="BOOM500">Boom 500 Index</option>
+          <option value="BOOM1000">Boom 1000 Index</option>
+          <option value="CRASH500">Crash 500 Index</option>
+          <option value="CRASH1000">Crash 1000 Index</option>
+          <option value="stpRNG">Step Index</option>
+          <option value="JD10">Jump 10 Index</option>
+          <option value="JD25">Jump 25 Index</option>
+          <option value="JD50">Jump 50 Index</option>
+          <option value="JD75">Jump 75 Index</option>
+          <option value="JD100">Jump 100 Index</option>
+        </select>
       </div>
       <div class="field">
         <label>Stake per side (USD)</label>
@@ -205,7 +248,10 @@
     </div>
 
     <div style="margin-top: 10px;">
-      <button class="btn btn-fire" id="fireBtn" onclick="firePair()" disabled>Fire Pair (CALL + PUT)</button>
+      <button class="btn btn-fire" id="startBtn" onclick="startEngine()" disabled>▶ Start Engine</button>
+      <button class="btn btn-stop" id="stopBtn" onclick="stopEngine()" style="display:none;">■ Stop Engine</button>
+      <button class="btn btn-connect" id="fireOnceBtn" onclick="firePair()" disabled style="margin-left: 8px;">Fire Once</button>
+      <span class="engine-indicator" id="engineIndicator">STOPPED</span>
     </div>
   </div>
 
@@ -223,6 +269,10 @@ let ws = null;
 let isConnected = false;
 let accountType = 'demo';
 let connectedAccountId = null;
+
+let running = false;
+let subscribedSymbol = null;
+let currentTick = null;
 
 const pendingContracts = {};
 const pendingPairMeta = [];
@@ -244,19 +294,37 @@ function setStatus(connected, text) {
   isConnected = connected;
   document.getElementById('statusDot').classList.toggle('connected', connected);
   document.getElementById('statusText').textContent = text;
-  document.getElementById('fireBtn').disabled = !connected;
   document.getElementById('disconnectBtn').style.display = connected ? 'inline-block' : 'none';
+  updateButtons();
 }
 function updateBalanceDisplay(balance, currency) {
   const pill = document.getElementById('balancePill');
   pill.textContent = `${Number(balance).toFixed(2)} ${currency}`;
   pill.classList.add('live');
 }
+function updateButtons() {
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const fireOnceBtn = document.getElementById('fireOnceBtn');
+  const indicator = document.getElementById('engineIndicator');
+
+  startBtn.disabled = !isConnected || running;
+  stopBtn.disabled = !running;
+  fireOnceBtn.disabled = !isConnected;
+
+  startBtn.style.display = running ? 'none' : 'inline-block';
+  stopBtn.style.display = running ? 'inline-block' : 'none';
+
+  indicator.textContent = running ? 'RUNNING' : 'STOPPED';
+  indicator.classList.toggle('running', running);
+}
 
 function disconnect() {
+  if (running) stopEngine();
   if (ws) { try { ws.close(); } catch (e) {} }
   ws = null;
   connectedAccountId = null;
+  subscribedSymbol = null;
   setStatus(false, 'Disconnected');
   document.getElementById('balancePill').classList.remove('live');
   document.getElementById('balancePill').textContent = '— no balance —';
@@ -429,6 +497,9 @@ async function connect() {
     ws.onclose = () => {
       log('Connection closed.', 'info');
       setStatus(false, 'Disconnected');
+      running = false;
+      subscribedSymbol = null;
+      updateButtons();
       document.getElementById('balancePill').classList.remove('live');
       document.getElementById('balancePill').textContent = '— no balance —';
     };
@@ -437,6 +508,27 @@ async function connect() {
     console.error(err);
     setStatus(false, 'Error');
   }
+}
+
+function startEngine() {
+  if (!isConnected || running) return;
+  const symbol = document.getElementById('symbol').value;
+  ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+  subscribedSymbol = symbol;
+  running = true;
+  log(`Engine STARTED — market: ${symbol}`, 'info');
+  updateButtons();
+}
+
+function stopEngine() {
+  if (!running) return;
+  if (subscribedSymbol && ws) {
+    ws.send(JSON.stringify({ forget_all: 'ticks' }));
+    subscribedSymbol = null;
+  }
+  running = false;
+  log('Engine STOPPED.', 'info');
+  updateButtons();
 }
 
 function handleMessage(data) {
@@ -449,6 +541,15 @@ function handleMessage(data) {
     case 'balance': {
       const b = data.balance || {};
       if (b.balance !== undefined) updateBalanceDisplay(b.balance, b.currency || 'USD');
+      break;
+    }
+
+    case 'tick': {
+      if (!data.tick) break;
+      currentTick = data.tick;
+      if (running && data.tick.symbol === subscribedSymbol) {
+        firePair();
+      }
       break;
     }
 
@@ -515,11 +616,10 @@ function buildBuyRequest(contractType, stake, symbol, duration) {
 
 function firePair() {
   if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
-  const symbol = document.getElementById('symbol').value.trim();
+  const symbol = document.getElementById('symbol').value;
   const stake = parseFloat(document.getElementById('stake').value);
   const duration = parseInt(document.getElementById('duration').value, 10);
 
-  if (!symbol) { log('Symbol is empty.', 'error'); return; }
   if (isNaN(stake) || stake < 0.35) { log('Stake must be at least 0.35.', 'error'); return; }
   if (isNaN(duration) || duration < 1) { log('Duration must be at least 1 tick.', 'error'); return; }
 
@@ -534,6 +634,7 @@ function firePair() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  updateButtons();
   checkOauthReturn();
 });
 </script>

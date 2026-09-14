@@ -110,6 +110,7 @@
   .log-error { color: #f59e0b; }
   .log-win { color: #26a969; font-weight: 700; }
   .log-loss { color: #d9534f; font-weight: 700; }
+  .log-cycle { color: #a78bfa; font-weight: 600; }
   .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .panel-header h2 { margin: 0; }
   .danger-banner {
@@ -175,7 +176,7 @@
 <body>
 <div class="container">
   <h1>Higher / Lower Pair Bot</h1>
-  <div class="subtitle">Fires CALL + PUT simultaneously on every tick</div>
+  <div class="subtitle">Fires one CALL + PUT pair, waits for both to settle, then fires the next</div>
 
   <div class="panel">
     <h2>Connection</h2>
@@ -271,8 +272,8 @@ let accountType = 'demo';
 let connectedAccountId = null;
 
 let running = false;
+let pairInFlight = false;
 let subscribedSymbol = null;
-let currentTick = null;
 
 const pendingContracts = {};
 const pendingPairMeta = [];
@@ -310,7 +311,7 @@ function updateButtons() {
 
   startBtn.disabled = !isConnected || running;
   stopBtn.disabled = !running;
-  fireOnceBtn.disabled = !isConnected;
+  fireOnceBtn.disabled = !isConnected || pairInFlight;
 
   startBtn.style.display = running ? 'none' : 'inline-block';
   stopBtn.style.display = running ? 'inline-block' : 'none';
@@ -325,6 +326,7 @@ function disconnect() {
   ws = null;
   connectedAccountId = null;
   subscribedSymbol = null;
+  pairInFlight = false;
   setStatus(false, 'Disconnected');
   document.getElementById('balancePill').classList.remove('live');
   document.getElementById('balancePill').textContent = '— no balance —';
@@ -498,6 +500,7 @@ async function connect() {
       log('Connection closed.', 'info');
       setStatus(false, 'Disconnected');
       running = false;
+      pairInFlight = false;
       subscribedSymbol = null;
       updateButtons();
       document.getElementById('balancePill').classList.remove('live');
@@ -516,18 +519,16 @@ function startEngine() {
   ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
   subscribedSymbol = symbol;
   running = true;
-  log(`Engine STARTED — market: ${symbol}`, 'info');
+  log(`Engine STARTED — market: ${symbol}`, 'cycle');
+  log('Firing first pair...', 'info');
+  firePair();
   updateButtons();
 }
 
 function stopEngine() {
   if (!running) return;
-  if (subscribedSymbol && ws) {
-    ws.send(JSON.stringify({ forget_all: 'ticks' }));
-    subscribedSymbol = null;
-  }
   running = false;
-  log('Engine STOPPED.', 'info');
+  log('Engine STOPPED. Current pair (if any) will still settle.', 'cycle');
   updateButtons();
 }
 
@@ -541,15 +542,6 @@ function handleMessage(data) {
     case 'balance': {
       const b = data.balance || {};
       if (b.balance !== undefined) updateBalanceDisplay(b.balance, b.currency || 'USD');
-      break;
-    }
-
-    case 'tick': {
-      if (!data.tick) break;
-      currentTick = data.tick;
-      if (running && data.tick.symbol === subscribedSymbol) {
-        firePair();
-      }
       break;
     }
 
@@ -593,6 +585,20 @@ function handleMessage(data) {
           profit > 0 ? 'win' : 'loss');
 
       ws.send(JSON.stringify({ forget: data.proposal_open_contract.id }));
+
+      delete pendingContracts[cid];
+
+      const stillOpen = Object.keys(pendingContracts).length > 0;
+      if (!stillOpen) {
+        pairInFlight = false;
+        updateButtons();
+        if (running) {
+          log('Pair settled. Firing next pair...', 'cycle');
+          setTimeout(() => {
+            if (running && !pairInFlight) firePair();
+          }, 300);
+        }
+      }
       break;
     }
   }
@@ -616,12 +622,17 @@ function buildBuyRequest(contractType, stake, symbol, duration) {
 
 function firePair() {
   if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
+  if (pairInFlight) return;
+
   const symbol = document.getElementById('symbol').value;
   const stake = parseFloat(document.getElementById('stake').value);
   const duration = parseInt(document.getElementById('duration').value, 10);
 
   if (isNaN(stake) || stake < 0.35) { log('Stake must be at least 0.35.', 'error'); return; }
   if (isNaN(duration) || duration < 1) { log('Duration must be at least 1 tick.', 'error'); return; }
+
+  pairInFlight = true;
+  updateButtons();
 
   pendingPairMeta.push({ contractType: 'CALL', stake });
   pendingPairMeta.push({ contractType: 'PUT',  stake });

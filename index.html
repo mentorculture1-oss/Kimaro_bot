@@ -696,9 +696,11 @@ function firePair() {
   if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
   if (isNaN(durationHigher) || durationHigher < 1) { log('Higher duration must be at least 1 tick.', 'error'); return; }
   if (!barrierHigher) { log('Higher barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
+  if (!/^[+-]/.test(barrierHigher)) { log('Higher barrier must start with + or - (e.g. +0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
   if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
   if (isNaN(durationLower) || durationLower < 1) { log('Lower duration must be at least 1 tick.', 'error'); return; }
   if (!barrierLower) { log('Lower barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
+  if (!/^[+-]/.test(barrierLower)) { log('Lower barrier must start with + or - (e.g. -0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
 
   pairInFlight = true;
   updateButtons();

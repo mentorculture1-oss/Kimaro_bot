@@ -324,6 +324,8 @@ let connectedAccountId = null;
 
 let running = false;
 let pairInFlight = false;
+let pendingBuyCount = 0;
+let pairWatchdogToken = 0;
 let subscribedSymbol = null;
 
 const pendingContracts = {};
@@ -592,6 +594,26 @@ function stopEngine() {
 function handleMessage(data) {
   if (data.error) {
     log('API error: ' + (data.error.message || JSON.stringify(data.error)), 'error');
+
+    // If this error was a response to one of our two buy requests, the pair
+    // can no longer complete as sent — release the lock instead of leaving
+    // the engine stuck thinking a trade is still in flight forever.
+    const isBuyError = data.msg_type === 'buy' || (data.echo_req && data.echo_req.buy !== undefined);
+    if (isBuyError && pairInFlight) {
+      pendingPairMeta.shift(); // drop the stale entry so future shifts stay aligned
+      pendingBuyCount = Math.max(0, pendingBuyCount - 1);
+      const stillOpen = Object.keys(pendingContracts).length > 0;
+      if (pendingBuyCount <= 0 && !stillOpen) {
+        pairInFlight = false;
+        pairWatchdogToken++;
+        updateButtons();
+        log('Pair failed to place — engine unlocked. Fix the settings above and try again.', 'error');
+        if (running) {
+          log('Auto-retrying next pair in 3s...', 'cycle');
+          setTimeout(() => { if (running && !pairInFlight) firePair(); }, 3000);
+        }
+      }
+    }
     return;
   }
 
@@ -605,6 +627,7 @@ function handleMessage(data) {
     case 'buy': {
       try {
         const cid = data.buy.contract_id;
+        pendingBuyCount = Math.max(0, pendingBuyCount - 1);
         const meta = pendingPairMeta.shift() || {};
         pendingContracts[cid] = {
           contractType: meta.contractType || 'CALL',
@@ -648,6 +671,7 @@ function handleMessage(data) {
       const stillOpen = Object.keys(pendingContracts).length > 0;
       if (!stillOpen) {
         pairInFlight = false;
+        pairWatchdogToken++;
         updateButtons();
         if (running) {
           log('Pair settled. Firing next pair...', 'cycle');
@@ -703,7 +727,18 @@ function firePair() {
   if (!/^[+-]/.test(barrierLower)) { log('Lower barrier must start with + or - (e.g. -0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
 
   pairInFlight = true;
+  pendingBuyCount = 2;
   updateButtons();
+
+  const watchdogToken = ++pairWatchdogToken;
+  setTimeout(() => {
+    if (watchdogToken === pairWatchdogToken && pairInFlight && pendingBuyCount > 0) {
+      log('No response from Deriv after 15s — unlocking engine. Check your connection and try again.', 'error');
+      pairInFlight = false;
+      pendingBuyCount = 0;
+      updateButtons();
+    }
+  }, 15000);
 
   pendingPairMeta.push({ contractType: 'CALL', stake: stakeHigher });
   pendingPairMeta.push({ contractType: 'PUT',  stake: stakeLower });

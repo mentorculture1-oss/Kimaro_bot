@@ -251,7 +251,7 @@
         </div>
         <div class="field">
           <label>Adjust Barrier (required)</label>
-          <input type="text" id="barrierHigher" placeholder="e.g. +0.01 — tiny offsets only for short ticks">
+          <input type="text" id="barrierHigher" placeholder="e.g. +0.10 (max 2 decimals — start small)">
         </div>
       </div>
 
@@ -294,7 +294,7 @@
         </div>
         <div class="field">
           <label>Adjust Barrier (required)</label>
-          <input type="text" id="barrierLower" placeholder="e.g. -0.01 — tiny offsets only for short ticks">
+          <input type="text" id="barrierLower" placeholder="e.g. -0.10 (max 2 decimals — start small)">
         </div>
       </div>
     </div>
@@ -570,13 +570,20 @@ function startEngine() {
   if (!isConnected || running) return;
   const barrierHigher = document.getElementById('barrierHigher').value.trim();
   const barrierLower = document.getElementById('barrierLower').value.trim();
+  const barrierPattern = /^[+-]\d+(\.\d{1,2})?$/;
   if (!barrierHigher || !barrierLower) {
     log('Enter a barrier for both Higher and Lower before starting the engine.', 'error');
     return;
   }
+  if (!barrierPattern.test(barrierHigher) || !barrierPattern.test(barrierLower)) {
+    log('Barriers must start with + or - and have at most 2 decimal places (e.g. +0.10 / -0.10).', 'error');
+    return;
+  }
   const symbol = document.getElementById('symbolHigher').value;
-  ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
-  subscribedSymbol = symbol;
+  if (subscribedSymbol !== symbol) {
+    ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    subscribedSymbol = symbol;
+  }
   running = true;
   log(`Engine STARTED — reference feed: ${symbol}`, 'cycle');
   log('Firing first pair...', 'info');
@@ -721,10 +728,12 @@ function firePair() {
   if (isNaN(durationHigher) || durationHigher < 1) { log('Higher duration must be at least 1 tick.', 'error'); return; }
   if (!barrierHigher) { log('Higher barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
   if (!/^[+-]/.test(barrierHigher)) { log('Higher barrier must start with + or - (e.g. +0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
+  if (!/^[+-]\d+(\.\d{1,2})?$/.test(barrierHigher)) { log('Higher barrier can only have up to 2 decimal places (e.g. +0.10, not +0.123).', 'error'); return; }
   if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
   if (isNaN(durationLower) || durationLower < 1) { log('Lower duration must be at least 1 tick.', 'error'); return; }
   if (!barrierLower) { log('Lower barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
   if (!/^[+-]/.test(barrierLower)) { log('Lower barrier must start with + or - (e.g. -0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
+  if (!/^[+-]\d+(\.\d{1,2})?$/.test(barrierLower)) { log('Lower barrier can only have up to 2 decimal places (e.g. -0.10, not -0.123).', 'error'); return; }
 
   pairInFlight = true;
   pendingBuyCount = 2;

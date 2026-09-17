@@ -242,8 +242,8 @@
           <input type="number" id="durationHigher" value="10" min="5" step="1">
         </div>
         <div class="field">
-          <label>Adjust Barrier (e.g. +5.00)</label>
-          <input type="text" id="barrierHigher" value="+5.00">
+          <label>Adjust Barrier (e.g. +50.00)</label>
+          <input type="text" id="barrierHigher" value="+50.00">
           <div class="hint" id="hintHigher">Must start with + (above spot)</div>
         </div>
       </div>
@@ -277,8 +277,8 @@
           <input type="number" id="durationLower" value="10" min="5" step="1">
         </div>
         <div class="field">
-          <label>Adjust Barrier (e.g. -5.00)</label>
-          <input type="text" id="barrierLower" value="-5.00">
+          <label>Adjust Barrier (e.g. -50.00)</label>
+          <input type="text" id="barrierLower" value="-50.00">
           <div class="hint" id="hintLower">Must start with - (below spot)</div>
         </div>
       </div>
@@ -288,6 +288,7 @@
       <button class="btn btn-fire" id="startBtn" onclick="startEngine()" disabled>▶ Start Engine</button>
       <button class="btn btn-stop" id="stopBtn" onclick="stopEngine()" style="display:none;">■ Stop Engine</button>
       <button class="btn btn-connect" id="fireOnceBtn" onclick="firePair()" disabled style="margin-left: 8px;">Fire Once</button>
+      <button class="btn btn-mini" id="checkRangeBtn" onclick="checkBarrierRange()" disabled style="margin-left: 8px;">Check Barrier Range</button>
       <span class="engine-indicator" id="engineIndicator">STOPPED</span>
     </div>
   </div>
@@ -317,7 +318,6 @@ let pairWatchdogToken = 0;
 let subscribedSymbol = null;
 
 // Proposal → buy tracking, keyed by integer req_id.
-// Each entry: { contractType, stake, symbol, status, proposalId? }
 const pendingProposals = {};
 // Settled contracts keyed by contract_id.
 const pendingContracts = {};
@@ -325,7 +325,6 @@ const pendingContracts = {};
 // Monotonic integer generator for req_id (Deriv requires integer).
 let reqIdCounter = 1;
 function nextReqId() {
-  // Wrap within safe integer range.
   reqIdCounter = (reqIdCounter % 2000000000) + 1;
   return reqIdCounter;
 }
@@ -362,11 +361,13 @@ function updateButtons() {
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
   const fireOnceBtn = document.getElementById('fireOnceBtn');
+  const checkRangeBtn = document.getElementById('checkRangeBtn');
   const indicator = document.getElementById('engineIndicator');
 
   startBtn.disabled = !isConnected || running;
   stopBtn.disabled = !running;
   fireOnceBtn.disabled = !isConnected || pairInFlight;
+  checkRangeBtn.disabled = !isConnected;
 
   startBtn.style.display = running ? 'none' : 'inline-block';
   stopBtn.style.display = running ? 'inline-block' : 'none';
@@ -575,42 +576,37 @@ async function connect() {
 }
 
 /* ============================================================
-   BARRIER VALIDATION
+   BARRIER VALIDATION (basic format check only;
+   real range comes from contracts_for)
 ============================================================ */
-// Rough minimum offsets so we never send obviously-invalid barriers.
-// These are conservative; Deriv's real minimum depends on spot + volatility.
-const MIN_BARRIER_OFFSETS = {
-  'R_10':     0.50,
-  'R_25':     1.00,
-  'R_50':     2.00,
-  'R_75':     3.00,
-  'R_100':    5.00,
-  '1HZ10V':   0.50,
-  '1HZ25V':   1.00,
-  '1HZ50V':   2.00,
-  '1HZ75V':   3.00,
-  '1HZ100V':  5.00,
-  'stpRNG':   1.00
-};
-
-function validateBarrier(raw, side, symbol) {
+function validateBarrierFormat(raw, side) {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return { ok: false, msg: `${side} barrier is required.` };
   if (!/^[+-]/.test(trimmed)) {
     return { ok: false, msg: `${side} barrier must start with ${side === 'Higher' ? '+' : '-'} (relative offset).` };
   }
   if (!/^[+-]\d+(\.\d+)?$/.test(trimmed)) {
-    return { ok: false, msg: `${side} barrier must be a number like ${side === 'Higher' ? '+5.00' : '-5.00'}.` };
+    return { ok: false, msg: `${side} barrier must be a number like ${side === 'Higher' ? '+50.00' : '-50.00'}.` };
   }
   const offset = parseFloat(trimmed);
   if (side === 'Higher' && offset <= 0) return { ok: false, msg: 'Higher barrier must be a positive offset (+X).' };
   if (side === 'Lower'  && offset >= 0) return { ok: false, msg: 'Lower barrier must be a negative offset (-X).' };
-
-  const min = MIN_BARRIER_OFFSETS[symbol] ?? 1.0;
-  if (Math.abs(offset) < min) {
-    return { ok: false, msg: `${side} barrier ±${Math.abs(offset)} is below the safe minimum (±${min}) for ${symbol}. Try ±${min * 2}.` };
-  }
   return { ok: true, value: trimmed };
+}
+
+/* ============================================================
+   QUERY CONTRACTS_FOR TO GET VALID BARRIER RANGE
+============================================================ */
+function checkBarrierRange() {
+  if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
+  const symbol = document.getElementById('symbolHigher').value;
+  const reqId = nextReqId();
+  log(`Querying contracts_for ${symbol} to find valid barrier range...`, 'info');
+  ws.send(JSON.stringify({
+    contracts_for: symbol,
+    currency: accountCurrency,
+    req_id: reqId
+  }));
 }
 
 /* ============================================================
@@ -621,8 +617,8 @@ function startEngine() {
 
   const symbolHigher = document.getElementById('symbolHigher').value;
   const symbolLower  = document.getElementById('symbolLower').value;
-  const bH = validateBarrier(document.getElementById('barrierHigher').value, 'Higher', symbolHigher);
-  const bL = validateBarrier(document.getElementById('barrierLower').value,  'Lower',  symbolLower);
+  const bH = validateBarrierFormat(document.getElementById('barrierHigher').value, 'Higher');
+  const bL = validateBarrierFormat(document.getElementById('barrierLower').value,  'Lower');
 
   if (!bH.ok) { log(bH.msg, 'error'); return; }
   if (!bL.ok) { log(bL.msg, 'error'); return; }
@@ -665,12 +661,12 @@ function firePair() {
 
   if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
   if (isNaN(durationHigher) || durationHigher < 5) { log('Higher duration must be at least 5 ticks for Higher/Lower.', 'error'); return; }
-  const vH = validateBarrier(barrierHigher, 'Higher', symbolHigher);
+  const vH = validateBarrierFormat(barrierHigher, 'Higher');
   if (!vH.ok) { log(vH.msg, 'error'); return; }
 
   if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
   if (isNaN(durationLower) || durationLower < 5) { log('Lower duration must be at least 5 ticks for Higher/Lower.', 'error'); return; }
-  const vL = validateBarrier(barrierLower, 'Lower', symbolLower);
+  const vL = validateBarrierFormat(barrierLower, 'Lower');
   if (!vL.ok) { log(vL.msg, 'error'); return; }
 
   pairInFlight = true;
@@ -715,6 +711,25 @@ function requestProposalAndBuy(contractType, stake, symbol, duration, barrier) {
    MESSAGE HANDLER
 ============================================================ */
 function handleMessage(data) {
+  // ---------- Contracts For (barrier range) ----------
+  if (data.msg_type === 'contracts_for') {
+    const available = data.contracts_for?.available;
+    if (Array.isArray(available)) {
+      const hl = available.find(c => 
+        c.contract_type === 'CALL' || c.contract_type === 'PUT'
+      );
+      if (hl) {
+        log(`Barrier range for ${data.echo_req.contracts_for}: ${hl.barrier || 'n/a'}`, 'info');
+        if (hl.barrier) {
+          log(`→ Use barrier values within this range in your settings above.`, 'cycle');
+        }
+      } else {
+        log(`No CALL/PUT contracts found for ${data.echo_req.contracts_for}.`, 'error');
+      }
+    }
+    return;
+  }
+
   // ---------- Errors ----------
   if (data.error) {
     const msg = data.error.message || JSON.stringify(data.error);
@@ -725,9 +740,9 @@ function handleMessage(data) {
     if (echoId !== undefined && pendingProposals[echoId]) {
       const pending = pendingProposals[echoId];
       delete pendingProposals[echoId];
-      log(`Proposal rejected for ${pending.contractType} (${pending.symbol}). Check barrier/stake/duration.`, 'error');
+      log(`Proposal rejected for ${pending.contractType} (${pending.symbol}).`, 'error');
       if (data.echo_req && data.echo_req.barrier !== undefined) {
-        log(`Barrier sent was: ${data.echo_req.barrier}`, 'error');
+        log(`Barrier sent was: ${data.echo_req.barrier} — click "Check Barrier Range" to see valid values.`, 'error');
       }
       maybeUnlockPair();
       return;
@@ -761,7 +776,6 @@ function handleMessage(data) {
 
       log(`Proposal OK for ${pending.contractType} — ask ${p.ask_price} ${accountCurrency}. Sending buy...`, 'info');
 
-      // Reserve a new integer req_id for the buy, and move the pending entry.
       const buyReqId = nextReqId();
       pendingProposals[buyReqId] = { ...pending, status: 'buying', buyReqId };
       delete pendingProposals[reqId];
@@ -829,8 +843,6 @@ function handleMessage(data) {
   }
 }
 
-// Called whenever a leg completes or fails. Unlocks the pair once
-// nothing is left in flight.
 function maybeUnlockPair() {
   const openContracts = Object.keys(pendingContracts).length;
   const openProposals = Object.keys(pendingProposals).length;

@@ -234,7 +234,7 @@
           </select>
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Adjust Stake (USD)</label>
+          <label>Stake (USD)</label>
           <input type="number" id="stakeHigher" value="2" min="0.35" step="0.01">
         </div>
         <div class="field" style="margin-bottom:10px;">
@@ -269,7 +269,7 @@
           </select>
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Adjust Stake (USD)</label>
+          <label>Stake (USD)</label>
           <input type="number" id="stakeLower" value="2" min="0.35" step="0.01">
         </div>
         <div class="field" style="margin-bottom:10px;">
@@ -316,11 +316,19 @@ let pairInFlight = false;
 let pairWatchdogToken = 0;
 let subscribedSymbol = null;
 
-// Proposal → buy tracking.
-// Each entry: { reqId, contractType, stake, status: 'proposal' | 'buying' }
+// Proposal → buy tracking, keyed by integer req_id.
+// Each entry: { contractType, stake, symbol, status, proposalId? }
 const pendingProposals = {};
 // Settled contracts keyed by contract_id.
 const pendingContracts = {};
+
+// Monotonic integer generator for req_id (Deriv requires integer).
+let reqIdCounter = 1;
+function nextReqId() {
+  // Wrap within safe integer range.
+  reqIdCounter = (reqIdCounter % 2000000000) + 1;
+  return reqIdCounter;
+}
 
 /* ============================================================
    LOGGING / UI
@@ -619,7 +627,6 @@ function startEngine() {
   if (!bH.ok) { log(bH.msg, 'error'); return; }
   if (!bL.ok) { log(bL.msg, 'error'); return; }
 
-  // Subscribe to the Higher symbol as reference feed for the log
   if (subscribedSymbol !== symbolHigher) {
     ws.send(JSON.stringify({ ticks: symbolHigher, subscribe: 1 }));
     subscribedSymbol = symbolHigher;
@@ -656,7 +663,6 @@ function firePair() {
   const durationLower = parseInt(document.getElementById('durationLower').value, 10);
   const barrierLower = document.getElementById('barrierLower').value.trim();
 
-  // Validate everything up front so we don't half-fire a pair.
   if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
   if (isNaN(durationHigher) || durationHigher < 5) { log('Higher duration must be at least 5 ticks for Higher/Lower.', 'error'); return; }
   const vH = validateBarrier(barrierHigher, 'Higher', symbolHigher);
@@ -688,8 +694,8 @@ function firePair() {
 }
 
 function requestProposalAndBuy(contractType, stake, symbol, duration, barrier) {
-  const reqId = 'prop_' + contractType + '_' + Math.random().toString(36).slice(2);
-  pendingProposals[reqId] = { contractType, stake, symbol, status: 'proposal' };
+  const reqId = nextReqId();
+  pendingProposals[reqId] = { contractType, stake, symbol, status: 'proposal', reqId };
 
   ws.send(JSON.stringify({
     proposal: 1,
@@ -715,17 +721,18 @@ function handleMessage(data) {
     const code = data.error.code || '';
     log(`API error [${code}]: ${msg}`, 'error');
 
-    // If this was a proposal error, drop the pending entry and unlock.
     const echoId = data.echo_req?.req_id;
-    if (echoId && pendingProposals[echoId]) {
+    if (echoId !== undefined && pendingProposals[echoId]) {
       const pending = pendingProposals[echoId];
       delete pendingProposals[echoId];
-      log(`Proposal rejected for ${pending.contractType} (${pending.symbol}, barrier not accepted).`, 'error');
+      log(`Proposal rejected for ${pending.contractType} (${pending.symbol}). Check barrier/stake/duration.`, 'error');
+      if (data.echo_req && data.echo_req.barrier !== undefined) {
+        log(`Barrier sent was: ${data.echo_req.barrier}`, 'error');
+      }
       maybeUnlockPair();
       return;
     }
 
-    // If this was a buy error, unlock too.
     if (data.echo_req && data.echo_req.buy !== undefined) {
       maybeUnlockPair();
       return;
@@ -734,7 +741,6 @@ function handleMessage(data) {
   }
 
   switch (data.msg_type) {
-    // ---------- Balance ----------
     case 'balance': {
       const b = data.balance || {};
       if (b.balance !== undefined) {
@@ -744,11 +750,10 @@ function handleMessage(data) {
       break;
     }
 
-    // ---------- Proposal → Buy ----------
     case 'proposal': {
       const p = data.proposal;
       const reqId = data.echo_req?.req_id;
-      if (!p || !p.id || !reqId || !pendingProposals[reqId]) break;
+      if (!p || !p.id || reqId === undefined || !pendingProposals[reqId]) break;
 
       const pending = pendingProposals[reqId];
       pending.status = 'buying';
@@ -756,24 +761,25 @@ function handleMessage(data) {
 
       log(`Proposal OK for ${pending.contractType} — ask ${p.ask_price} ${accountCurrency}. Sending buy...`, 'info');
 
-      // Buy using the proposal id + ask price.
+      // Reserve a new integer req_id for the buy, and move the pending entry.
+      const buyReqId = nextReqId();
+      pendingProposals[buyReqId] = { ...pending, status: 'buying', buyReqId };
+      delete pendingProposals[reqId];
+
       ws.send(JSON.stringify({
         buy: p.id,
         price: p.ask_price,
-        req_id: 'buy_' + reqId
+        req_id: buyReqId
       }));
       break;
     }
 
-    // ---------- Buy confirmation ----------
     case 'buy': {
       const b = data.buy;
       if (!b || !b.contract_id) break;
 
-      // Match buy back to our pending proposal via req_id prefix.
-      const echoId = data.echo_req?.req_id || '';
-      const propReqId = echoId.startsWith('buy_prop_') ? echoId.slice(4) : null;
-      const pending = propReqId ? pendingProposals[propReqId] : null;
+      const echoId = data.echo_req?.req_id;
+      const pending = (echoId !== undefined) ? pendingProposals[echoId] : null;
 
       const contractType = pending?.contractType || 'CALL';
       const stake = pending?.stake || parseFloat(b.buy_price);
@@ -783,7 +789,7 @@ function handleMessage(data) {
         stake,
         recorded: false
       };
-      if (propReqId) delete pendingProposals[propReqId];
+      if (echoId !== undefined) delete pendingProposals[echoId];
 
       log((contractType === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
           ` placed — contract ${b.contract_id}, price ${b.buy_price}`,
@@ -797,7 +803,6 @@ function handleMessage(data) {
       break;
     }
 
-    // ---------- Contract settlement ----------
     case 'proposal_open_contract': {
       const c = data.proposal_open_contract;
       if (!c || !c.is_sold) break;
@@ -815,7 +820,6 @@ function handleMessage(data) {
           `P&L ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
           profit > 0 ? 'win' : 'loss');
 
-      // Unsubscribe from the open-contract stream.
       ws.send(JSON.stringify({ forget: data.proposal_open_contract.id }));
 
       delete pendingContracts[cid];

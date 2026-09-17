@@ -171,6 +171,7 @@
     content: "● ";
     color: #d9534f;
   }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -224,21 +225,12 @@
             <option value="R_50">Volatility 50 Index</option>
             <option value="R_75">Volatility 75 Index</option>
             <option value="R_100">Volatility 100 Index</option>
-            <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
+            <option value="1HZ10V">Volatility 10 (1s) Index</option>
             <option value="1HZ25V">Volatility 25 (1s) Index</option>
             <option value="1HZ50V">Volatility 50 (1s) Index</option>
             <option value="1HZ75V">Volatility 75 (1s) Index</option>
-            <option value="1HZ100V">Volatility 100 (1s) Index</option>
-            <option value="BOOM500">Boom 500 Index</option>
-            <option value="BOOM1000">Boom 1000 Index</option>
-            <option value="CRASH500">Crash 500 Index</option>
-            <option value="CRASH1000">Crash 1000 Index</option>
+            <option value="1HZ100V" selected>Volatility 100 (1s) Index</option>
             <option value="stpRNG">Step Index</option>
-            <option value="JD10">Jump 10 Index</option>
-            <option value="JD25">Jump 25 Index</option>
-            <option value="JD50">Jump 50 Index</option>
-            <option value="JD75">Jump 75 Index</option>
-            <option value="JD100">Jump 100 Index</option>
           </select>
         </div>
         <div class="field" style="margin-bottom:10px;">
@@ -246,12 +238,13 @@
           <input type="number" id="stakeHigher" value="2" min="0.35" step="0.01">
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Duration Adjust (ticks)</label>
-          <input type="number" id="durationHigher" value="10" min="1" step="1">
+          <label>Duration (ticks)</label>
+          <input type="number" id="durationHigher" value="10" min="5" step="1">
         </div>
         <div class="field">
-          <label>Adjust Barrier (required)</label>
-          <input type="text" id="barrierHigher" placeholder="e.g. +0.10 (max 2 decimals — start small)">
+          <label>Adjust Barrier (e.g. +5.00)</label>
+          <input type="text" id="barrierHigher" value="+5.00">
+          <div class="hint" id="hintHigher">Must start with + (above spot)</div>
         </div>
       </div>
 
@@ -267,21 +260,12 @@
             <option value="R_50">Volatility 50 Index</option>
             <option value="R_75">Volatility 75 Index</option>
             <option value="R_100">Volatility 100 Index</option>
-            <option value="1HZ10V" selected>Volatility 10 (1s) Index</option>
+            <option value="1HZ10V">Volatility 10 (1s) Index</option>
             <option value="1HZ25V">Volatility 25 (1s) Index</option>
             <option value="1HZ50V">Volatility 50 (1s) Index</option>
             <option value="1HZ75V">Volatility 75 (1s) Index</option>
-            <option value="1HZ100V">Volatility 100 (1s) Index</option>
-            <option value="BOOM500">Boom 500 Index</option>
-            <option value="BOOM1000">Boom 1000 Index</option>
-            <option value="CRASH500">Crash 500 Index</option>
-            <option value="CRASH1000">Crash 1000 Index</option>
+            <option value="1HZ100V" selected>Volatility 100 (1s) Index</option>
             <option value="stpRNG">Step Index</option>
-            <option value="JD10">Jump 10 Index</option>
-            <option value="JD25">Jump 25 Index</option>
-            <option value="JD50">Jump 50 Index</option>
-            <option value="JD75">Jump 75 Index</option>
-            <option value="JD100">Jump 100 Index</option>
           </select>
         </div>
         <div class="field" style="margin-bottom:10px;">
@@ -289,12 +273,13 @@
           <input type="number" id="stakeLower" value="2" min="0.35" step="0.01">
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Duration Adjust (ticks)</label>
-          <input type="number" id="durationLower" value="10" min="1" step="1">
+          <label>Duration (ticks)</label>
+          <input type="number" id="durationLower" value="10" min="5" step="1">
         </div>
         <div class="field">
-          <label>Adjust Barrier (required)</label>
-          <input type="text" id="barrierLower" placeholder="e.g. -0.10 (max 2 decimals — start small)">
+          <label>Adjust Barrier (e.g. -5.00)</label>
+          <input type="text" id="barrierLower" value="-5.00">
+          <div class="hint" id="hintLower">Must start with - (below spot)</div>
         </div>
       </div>
     </div>
@@ -317,20 +302,29 @@
 </div>
 
 <script>
+/* ============================================================
+   STATE
+============================================================ */
 let ws = null;
 let isConnected = false;
 let accountType = 'demo';
 let connectedAccountId = null;
+let accountCurrency = 'USD';
 
 let running = false;
 let pairInFlight = false;
-let pendingBuyCount = 0;
 let pairWatchdogToken = 0;
 let subscribedSymbol = null;
 
+// Proposal → buy tracking.
+// Each entry: { reqId, contractType, stake, status: 'proposal' | 'buying' }
+const pendingProposals = {};
+// Settled contracts keyed by contract_id.
 const pendingContracts = {};
-const pendingPairMeta = [];
 
+/* ============================================================
+   LOGGING / UI
+============================================================ */
 function log(message, type = 'info') {
   const logEl = document.getElementById('log');
   const entry = document.createElement('div');
@@ -394,6 +388,9 @@ function setAccountType(type) {
   document.getElementById('dangerBanner').classList.toggle('show', type === 'real');
 }
 
+/* ============================================================
+   OAUTH (PKCE)
+============================================================ */
 function base64UrlEncode(buffer) {
   let str = '';
   const bytes = new Uint8Array(buffer);
@@ -485,6 +482,9 @@ function checkOauthReturn() {
   }
 }
 
+/* ============================================================
+   ACCOUNT LOOKUP
+============================================================ */
 function accountIsDemo(a) {
   const grp = String(a.group || a.account_type || a.type || '').toLowerCase();
   if (grp.includes('demo') || grp.includes('virtual')) return true;
@@ -566,26 +566,67 @@ async function connect() {
   }
 }
 
+/* ============================================================
+   BARRIER VALIDATION
+============================================================ */
+// Rough minimum offsets so we never send obviously-invalid barriers.
+// These are conservative; Deriv's real minimum depends on spot + volatility.
+const MIN_BARRIER_OFFSETS = {
+  'R_10':     0.50,
+  'R_25':     1.00,
+  'R_50':     2.00,
+  'R_75':     3.00,
+  'R_100':    5.00,
+  '1HZ10V':   0.50,
+  '1HZ25V':   1.00,
+  '1HZ50V':   2.00,
+  '1HZ75V':   3.00,
+  '1HZ100V':  5.00,
+  'stpRNG':   1.00
+};
+
+function validateBarrier(raw, side, symbol) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { ok: false, msg: `${side} barrier is required.` };
+  if (!/^[+-]/.test(trimmed)) {
+    return { ok: false, msg: `${side} barrier must start with ${side === 'Higher' ? '+' : '-'} (relative offset).` };
+  }
+  if (!/^[+-]\d+(\.\d+)?$/.test(trimmed)) {
+    return { ok: false, msg: `${side} barrier must be a number like ${side === 'Higher' ? '+5.00' : '-5.00'}.` };
+  }
+  const offset = parseFloat(trimmed);
+  if (side === 'Higher' && offset <= 0) return { ok: false, msg: 'Higher barrier must be a positive offset (+X).' };
+  if (side === 'Lower'  && offset >= 0) return { ok: false, msg: 'Lower barrier must be a negative offset (-X).' };
+
+  const min = MIN_BARRIER_OFFSETS[symbol] ?? 1.0;
+  if (Math.abs(offset) < min) {
+    return { ok: false, msg: `${side} barrier ±${Math.abs(offset)} is below the safe minimum (±${min}) for ${symbol}. Try ±${min * 2}.` };
+  }
+  return { ok: true, value: trimmed };
+}
+
+/* ============================================================
+   ENGINE CONTROL
+============================================================ */
 function startEngine() {
   if (!isConnected || running) return;
-  const barrierHigher = document.getElementById('barrierHigher').value.trim();
-  const barrierLower = document.getElementById('barrierLower').value.trim();
-  const barrierPattern = /^[+-]\d+(\.\d{1,2})?$/;
-  if (!barrierHigher || !barrierLower) {
-    log('Enter a barrier for both Higher and Lower before starting the engine.', 'error');
-    return;
+
+  const symbolHigher = document.getElementById('symbolHigher').value;
+  const symbolLower  = document.getElementById('symbolLower').value;
+  const bH = validateBarrier(document.getElementById('barrierHigher').value, 'Higher', symbolHigher);
+  const bL = validateBarrier(document.getElementById('barrierLower').value,  'Lower',  symbolLower);
+
+  if (!bH.ok) { log(bH.msg, 'error'); return; }
+  if (!bL.ok) { log(bL.msg, 'error'); return; }
+
+  // Subscribe to the Higher symbol as reference feed for the log
+  if (subscribedSymbol !== symbolHigher) {
+    ws.send(JSON.stringify({ ticks: symbolHigher, subscribe: 1 }));
+    subscribedSymbol = symbolHigher;
   }
-  if (!barrierPattern.test(barrierHigher) || !barrierPattern.test(barrierLower)) {
-    log('Barriers must start with + or - and have at most 2 decimal places (e.g. +0.10 / -0.10).', 'error');
-    return;
-  }
-  const symbol = document.getElementById('symbolHigher').value;
-  if (subscribedSymbol !== symbol) {
-    ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
-    subscribedSymbol = symbol;
-  }
+
   running = true;
-  log(`Engine STARTED — reference feed: ${symbol}`, 'cycle');
+  log(`Engine STARTED — reference feed: ${symbolHigher}`, 'cycle');
   log('Firing first pair...', 'info');
   firePair();
   updateButtons();
@@ -598,62 +639,165 @@ function stopEngine() {
   updateButtons();
 }
 
-function handleMessage(data) {
-  if (data.error) {
-    log('API error: ' + (data.error.message || JSON.stringify(data.error)), 'error');
+/* ============================================================
+   FIRE PAIR: proposal → buy for both legs
+============================================================ */
+function firePair() {
+  if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
+  if (pairInFlight) return;
 
-    // If this error was a response to one of our two buy requests, the pair
-    // can no longer complete as sent — release the lock instead of leaving
-    // the engine stuck thinking a trade is still in flight forever.
-    const isBuyError = data.msg_type === 'buy' || (data.echo_req && data.echo_req.buy !== undefined);
-    if (isBuyError && pairInFlight) {
-      pendingPairMeta.shift(); // drop the stale entry so future shifts stay aligned
-      pendingBuyCount = Math.max(0, pendingBuyCount - 1);
-      const stillOpen = Object.keys(pendingContracts).length > 0;
-      if (pendingBuyCount <= 0 && !stillOpen) {
-        pairInFlight = false;
-        pairWatchdogToken++;
-        updateButtons();
-        log('Pair failed to place — engine unlocked. Fix the settings above and try again.', 'error');
-        if (running) {
-          log('Auto-retrying next pair in 3s...', 'cycle');
-          setTimeout(() => { if (running && !pairInFlight) firePair(); }, 3000);
-        }
-      }
+  const symbolHigher  = document.getElementById('symbolHigher').value;
+  const stakeHigher   = parseFloat(document.getElementById('stakeHigher').value);
+  const durationHigher = parseInt(document.getElementById('durationHigher').value, 10);
+  const barrierHigher = document.getElementById('barrierHigher').value.trim();
+
+  const symbolLower  = document.getElementById('symbolLower').value;
+  const stakeLower   = parseFloat(document.getElementById('stakeLower').value);
+  const durationLower = parseInt(document.getElementById('durationLower').value, 10);
+  const barrierLower = document.getElementById('barrierLower').value.trim();
+
+  // Validate everything up front so we don't half-fire a pair.
+  if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
+  if (isNaN(durationHigher) || durationHigher < 5) { log('Higher duration must be at least 5 ticks for Higher/Lower.', 'error'); return; }
+  const vH = validateBarrier(barrierHigher, 'Higher', symbolHigher);
+  if (!vH.ok) { log(vH.msg, 'error'); return; }
+
+  if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
+  if (isNaN(durationLower) || durationLower < 5) { log('Lower duration must be at least 5 ticks for Higher/Lower.', 'error'); return; }
+  const vL = validateBarrier(barrierLower, 'Lower', symbolLower);
+  if (!vL.ok) { log(vL.msg, 'error'); return; }
+
+  pairInFlight = true;
+  updateButtons();
+
+  const watchdogToken = ++pairWatchdogToken;
+  setTimeout(() => {
+    if (watchdogToken === pairWatchdogToken && pairInFlight) {
+      log('No buy confirmation after 20s — unlocking engine.', 'error');
+      pairInFlight = false;
+      updateButtons();
+    }
+  }, 20000);
+
+  const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
+  log(`Firing PAIR${tag} — Higher: ${symbolHigher} $${stakeHigher}, ${durationHigher}t, barrier ${barrierHigher} | ` +
+      `Lower: ${symbolLower} $${stakeLower}, ${durationLower}t, barrier ${barrierLower}`, 'info');
+
+  requestProposalAndBuy('CALL', stakeHigher, symbolHigher, durationHigher, barrierHigher);
+  requestProposalAndBuy('PUT',  stakeLower,  symbolLower,  durationLower,  barrierLower);
+}
+
+function requestProposalAndBuy(contractType, stake, symbol, duration, barrier) {
+  const reqId = 'prop_' + contractType + '_' + Math.random().toString(36).slice(2);
+  pendingProposals[reqId] = { contractType, stake, symbol, status: 'proposal' };
+
+  ws.send(JSON.stringify({
+    proposal: 1,
+    amount: stake,
+    basis: 'stake',
+    contract_type: contractType,
+    currency: accountCurrency,
+    duration: duration,
+    duration_unit: 't',
+    underlying_symbol: symbol,
+    barrier: barrier,
+    req_id: reqId
+  }));
+}
+
+/* ============================================================
+   MESSAGE HANDLER
+============================================================ */
+function handleMessage(data) {
+  // ---------- Errors ----------
+  if (data.error) {
+    const msg = data.error.message || JSON.stringify(data.error);
+    const code = data.error.code || '';
+    log(`API error [${code}]: ${msg}`, 'error');
+
+    // If this was a proposal error, drop the pending entry and unlock.
+    const echoId = data.echo_req?.req_id;
+    if (echoId && pendingProposals[echoId]) {
+      const pending = pendingProposals[echoId];
+      delete pendingProposals[echoId];
+      log(`Proposal rejected for ${pending.contractType} (${pending.symbol}, barrier not accepted).`, 'error');
+      maybeUnlockPair();
+      return;
+    }
+
+    // If this was a buy error, unlock too.
+    if (data.echo_req && data.echo_req.buy !== undefined) {
+      maybeUnlockPair();
+      return;
     }
     return;
   }
 
   switch (data.msg_type) {
+    // ---------- Balance ----------
     case 'balance': {
       const b = data.balance || {};
-      if (b.balance !== undefined) updateBalanceDisplay(b.balance, b.currency || 'USD');
+      if (b.balance !== undefined) {
+        updateBalanceDisplay(b.balance, b.currency || 'USD');
+        if (b.currency) accountCurrency = b.currency;
+      }
       break;
     }
 
+    // ---------- Proposal → Buy ----------
+    case 'proposal': {
+      const p = data.proposal;
+      const reqId = data.echo_req?.req_id;
+      if (!p || !p.id || !reqId || !pendingProposals[reqId]) break;
+
+      const pending = pendingProposals[reqId];
+      pending.status = 'buying';
+      pending.proposalId = p.id;
+
+      log(`Proposal OK for ${pending.contractType} — ask ${p.ask_price} ${accountCurrency}. Sending buy...`, 'info');
+
+      // Buy using the proposal id + ask price.
+      ws.send(JSON.stringify({
+        buy: p.id,
+        price: p.ask_price,
+        req_id: 'buy_' + reqId
+      }));
+      break;
+    }
+
+    // ---------- Buy confirmation ----------
     case 'buy': {
-      try {
-        const cid = data.buy.contract_id;
-        pendingBuyCount = Math.max(0, pendingBuyCount - 1);
-        const meta = pendingPairMeta.shift() || {};
-        pendingContracts[cid] = {
-          contractType: meta.contractType || 'CALL',
-          stake: meta.stake || parseFloat(data.buy.buy_price),
-          recorded: false
-        };
-        const ct = pendingContracts[cid].contractType;
-        log((ct === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
-            ` placed — contract ${cid}, price ${data.buy.buy_price}`,
-            ct === 'CALL' ? 'buy' : 'sell');
-        ws.send(JSON.stringify({
-          proposal_open_contract: 1,
-          contract_id: cid,
-          subscribe: 1
-        }));
-      } catch (e) { console.error(e, data); }
+      const b = data.buy;
+      if (!b || !b.contract_id) break;
+
+      // Match buy back to our pending proposal via req_id prefix.
+      const echoId = data.echo_req?.req_id || '';
+      const propReqId = echoId.startsWith('buy_prop_') ? echoId.slice(4) : null;
+      const pending = propReqId ? pendingProposals[propReqId] : null;
+
+      const contractType = pending?.contractType || 'CALL';
+      const stake = pending?.stake || parseFloat(b.buy_price);
+
+      pendingContracts[b.contract_id] = {
+        contractType,
+        stake,
+        recorded: false
+      };
+      if (propReqId) delete pendingProposals[propReqId];
+
+      log((contractType === 'CALL' ? 'BUY (Higher)' : 'SELL (Lower)') +
+          ` placed — contract ${b.contract_id}, price ${b.buy_price}`,
+          contractType === 'CALL' ? 'buy' : 'sell');
+
+      ws.send(JSON.stringify({
+        proposal_open_contract: 1,
+        contract_id: b.contract_id,
+        subscribe: 1
+      }));
       break;
     }
 
+    // ---------- Contract settlement ----------
     case 'proposal_open_contract': {
       const c = data.proposal_open_contract;
       if (!c || !c.is_sold) break;
@@ -671,95 +815,37 @@ function handleMessage(data) {
           `P&L ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}`,
           profit > 0 ? 'win' : 'loss');
 
+      // Unsubscribe from the open-contract stream.
       ws.send(JSON.stringify({ forget: data.proposal_open_contract.id }));
 
       delete pendingContracts[cid];
-
-      const stillOpen = Object.keys(pendingContracts).length > 0;
-      if (!stillOpen) {
-        pairInFlight = false;
-        pairWatchdogToken++;
-        updateButtons();
-        if (running) {
-          log('Pair settled. Firing next pair...', 'cycle');
-          setTimeout(() => {
-            if (running && !pairInFlight) firePair();
-          }, 300);
-        }
-      }
+      maybeUnlockPair();
       break;
     }
   }
 }
 
-function buildBuyRequest(contractType, stake, symbol, duration, barrier) {
-  const parameters = {
-    amount: stake,
-    basis: 'stake',
-    contract_type: contractType,
-    currency: 'USD',
-    duration: duration,
-    duration_unit: 't',
-    underlying_symbol: symbol
-  };
-  if (barrier) parameters.barrier = barrier;
-  return {
-    buy: 1,
-    price: stake,
-    parameters: parameters
-  };
-}
-
-function firePair() {
-  if (!isConnected || !ws) { log('Not connected.', 'error'); return; }
-  if (pairInFlight) return;
-
-  const symbolHigher = document.getElementById('symbolHigher').value;
-  const stakeHigher = parseFloat(document.getElementById('stakeHigher').value);
-  const durationHigher = parseInt(document.getElementById('durationHigher').value, 10);
-  const barrierHigher = document.getElementById('barrierHigher').value.trim();
-
-  const symbolLower = document.getElementById('symbolLower').value;
-  const stakeLower = parseFloat(document.getElementById('stakeLower').value);
-  const durationLower = parseInt(document.getElementById('durationLower').value, 10);
-  const barrierLower = document.getElementById('barrierLower').value.trim();
-
-  if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
-  if (isNaN(durationHigher) || durationHigher < 1) { log('Higher duration must be at least 1 tick.', 'error'); return; }
-  if (!barrierHigher) { log('Higher barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
-  if (!/^[+-]/.test(barrierHigher)) { log('Higher barrier must start with + or - (e.g. +0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
-  if (!/^[+-]\d+(\.\d{1,2})?$/.test(barrierHigher)) { log('Higher barrier can only have up to 2 decimal places (e.g. +0.10, not +0.123).', 'error'); return; }
-  if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
-  if (isNaN(durationLower) || durationLower < 1) { log('Lower duration must be at least 1 tick.', 'error'); return; }
-  if (!barrierLower) { log('Lower barrier is required — this bot trades Higher/Lower, not Rise/Fall.', 'error'); return; }
-  if (!/^[+-]/.test(barrierLower)) { log('Lower barrier must start with + or - (e.g. -0.1), or Deriv reads it as an absolute price and rejects it.', 'error'); return; }
-  if (!/^[+-]\d+(\.\d{1,2})?$/.test(barrierLower)) { log('Lower barrier can only have up to 2 decimal places (e.g. -0.10, not -0.123).', 'error'); return; }
-
-  pairInFlight = true;
-  pendingBuyCount = 2;
-  updateButtons();
-
-  const watchdogToken = ++pairWatchdogToken;
-  setTimeout(() => {
-    if (watchdogToken === pairWatchdogToken && pairInFlight && pendingBuyCount > 0) {
-      log('No response from Deriv after 15s — unlocking engine. Check your connection and try again.', 'error');
-      pairInFlight = false;
-      pendingBuyCount = 0;
-      updateButtons();
+// Called whenever a leg completes or fails. Unlocks the pair once
+// nothing is left in flight.
+function maybeUnlockPair() {
+  const openContracts = Object.keys(pendingContracts).length;
+  const openProposals = Object.keys(pendingProposals).length;
+  if (openContracts === 0 && openProposals === 0 && pairInFlight) {
+    pairInFlight = false;
+    pairWatchdogToken++;
+    updateButtons();
+    if (running) {
+      log('Pair settled. Firing next pair...', 'cycle');
+      setTimeout(() => {
+        if (running && !pairInFlight) firePair();
+      }, 300);
     }
-  }, 15000);
-
-  pendingPairMeta.push({ contractType: 'CALL', stake: stakeHigher });
-  pendingPairMeta.push({ contractType: 'PUT',  stake: stakeLower });
-
-  ws.send(JSON.stringify(buildBuyRequest('CALL', stakeHigher, symbolHigher, durationHigher, barrierHigher)));
-  ws.send(JSON.stringify(buildBuyRequest('PUT',  stakeLower, symbolLower, durationLower, barrierLower)));
-
-  const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Fired PAIR${tag} — Higher: ${symbolHigher} $${stakeHigher}, ${durationHigher}t${barrierHigher ? ', barrier ' + barrierHigher : ''} | ` +
-      `Lower: ${symbolLower} $${stakeLower}, ${durationLower}t${barrierLower ? ', barrier ' + barrierLower : ''}`, 'info');
+  }
 }
 
+/* ============================================================
+   BOOT
+============================================================ */
 window.addEventListener('DOMContentLoaded', () => {
   updateButtons();
   checkOauthReturn();

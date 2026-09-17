@@ -238,8 +238,8 @@
           <input type="number" id="stakeHigher" value="2" min="0.35" step="0.01">
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Duration (minutes)</label>
-          <input type="number" id="durationHigher" value="1" min="1" step="1">
+          <label>Duration (ticks)</label>
+          <input type="number" id="durationHigher" value="9" min="5" step="1">
         </div>
         <div class="field">
           <label>Barrier Offset (e.g. +0.50)</label>
@@ -273,8 +273,8 @@
           <input type="number" id="stakeLower" value="2" min="0.35" step="0.01">
         </div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Duration (minutes)</label>
-          <input type="number" id="durationLower" value="1" min="1" step="1">
+          <label>Duration (ticks)</label>
+          <input type="number" id="durationLower" value="9" min="5" step="1">
         </div>
         <div class="field">
           <label>Barrier Offset (e.g. -0.50)</label>
@@ -315,7 +315,6 @@ let running = false;
 let pairInFlight = false;
 let subscribedSymbol = null;
 
-// Watchdog now only monitors proposal → buy confirmation window.
 let buyWatchdog = null;
 
 const pendingProposals = {};
@@ -625,17 +624,16 @@ function firePair() {
   const barrierLower = document.getElementById('barrierLower').value.trim();
 
   if (isNaN(stakeHigher) || stakeHigher < 0.35) { log('Higher stake must be at least 0.35.', 'error'); return; }
-  if (isNaN(durationHigher) || durationHigher < 1) { log('Higher duration must be at least 1 minute.', 'error'); return; }
+  if (isNaN(durationHigher) || durationHigher < 5) { log('Higher duration must be at least 5 ticks.', 'error'); return; }
   if (!barrierHigher || !/^[+-]/.test(barrierHigher)) { log('Higher barrier must start with +.', 'error'); return; }
 
   if (isNaN(stakeLower) || stakeLower < 0.35) { log('Lower stake must be at least 0.35.', 'error'); return; }
-  if (isNaN(durationLower) || durationLower < 1) { log('Lower duration must be at least 1 minute.', 'error'); return; }
+  if (isNaN(durationLower) || durationLower < 5) { log('Lower duration must be at least 5 ticks.', 'error'); return; }
   if (!barrierLower || !/^[+-]/.test(barrierLower)) { log('Lower barrier must start with -.', 'error'); return; }
 
   pairInFlight = true;
   updateButtons();
 
-  // Watchdog only monitors the proposal→buy window, not the open-contract period.
   if (buyWatchdog) clearTimeout(buyWatchdog);
   buyWatchdog = setTimeout(() => {
     buyWatchdog = null;
@@ -648,8 +646,8 @@ function firePair() {
   }, 20000);
 
   const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
-  log(`Firing PAIR${tag} — Higher: ${symbolHigher} $${stakeHigher}, ${durationHigher}m, barrier ${barrierHigher} | ` +
-      `Lower: ${symbolLower} $${stakeLower}, ${durationLower}m, barrier ${barrierLower}`, 'info');
+  log(`Firing PAIR${tag} — Higher: ${symbolHigher} $${stakeHigher}, ${durationHigher}t, barrier ${barrierHigher} | ` +
+      `Lower: ${symbolLower} $${stakeLower}, ${durationLower}t, barrier ${barrierLower}`, 'info');
 
   requestProposalAndBuy('HIGHER', stakeHigher, symbolHigher, durationHigher, barrierHigher);
   requestProposalAndBuy('LOWER',  stakeLower,  symbolLower,  durationLower,  barrierLower);
@@ -666,7 +664,7 @@ function requestProposalAndBuy(contractType, stake, symbol, duration, barrier) {
     contract_type: contractType,
     currency: accountCurrency,
     duration: duration,
-    duration_unit: 'm',
+    duration_unit: 't',
     underlying_symbol: symbol,
     barrier: barrier,
     req_id: reqId
@@ -755,8 +753,6 @@ function handleMessage(data) {
           ` placed — contract ${b.contract_id}, price ${b.buy_price}`,
           contractType === 'HIGHER' ? 'buy' : 'sell');
 
-      // If no proposals remain, we're past the proposal→buy window.
-      // Clear the watchdog so it doesn't fire during settlement.
       if (Object.keys(pendingProposals).length === 0) {
         if (buyWatchdog) { clearTimeout(buyWatchdog); buyWatchdog = null; }
       }

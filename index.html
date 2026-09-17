@@ -313,8 +313,10 @@ let accountCurrency = 'USD';
 
 let running = false;
 let pairInFlight = false;
-let pairWatchdogToken = 0;
 let subscribedSymbol = null;
+
+// Watchdog now only monitors proposal → buy confirmation window.
+let buyWatchdog = null;
 
 const pendingProposals = {};
 const pendingContracts = {};
@@ -372,6 +374,7 @@ function updateButtons() {
 
 function disconnect() {
   if (running) stopEngine();
+  if (buyWatchdog) { clearTimeout(buyWatchdog); buyWatchdog = null; }
   if (ws) { try { ws.close(); } catch (e) {} }
   ws = null;
   connectedAccountId = null;
@@ -558,6 +561,7 @@ async function connect() {
       running = false;
       pairInFlight = false;
       subscribedSymbol = null;
+      if (buyWatchdog) { clearTimeout(buyWatchdog); buyWatchdog = null; }
       updateButtons();
       document.getElementById('balancePill').classList.remove('live');
       document.getElementById('balancePill').textContent = '— no balance —';
@@ -576,7 +580,6 @@ function startEngine() {
   if (!isConnected || running) return;
 
   const symbolHigher = document.getElementById('symbolHigher').value;
-  const symbolLower  = document.getElementById('symbolLower').value;
   const bH = document.getElementById('barrierHigher').value.trim();
   const bL = document.getElementById('barrierLower').value.trim();
 
@@ -632,20 +635,22 @@ function firePair() {
   pairInFlight = true;
   updateButtons();
 
-  const watchdogToken = ++pairWatchdogToken;
-  setTimeout(() => {
-    if (watchdogToken === pairWatchdogToken && pairInFlight) {
-      log('No buy confirmation after 30s — unlocking engine.', 'error');
+  // Watchdog only monitors the proposal→buy window, not the open-contract period.
+  if (buyWatchdog) clearTimeout(buyWatchdog);
+  buyWatchdog = setTimeout(() => {
+    buyWatchdog = null;
+    if (pairInFlight && Object.keys(pendingProposals).length > 0) {
+      log('No buy confirmation after 20s — proposals stuck. Unlocking engine.', 'error');
+      for (const k of Object.keys(pendingProposals)) delete pendingProposals[k];
       pairInFlight = false;
       updateButtons();
     }
-  }, 30000);
+  }, 20000);
 
   const tag = accountType === 'real' ? ' [REAL]' : ' [DEMO]';
   log(`Firing PAIR${tag} — Higher: ${symbolHigher} $${stakeHigher}, ${durationHigher}m, barrier ${barrierHigher} | ` +
       `Lower: ${symbolLower} $${stakeLower}, ${durationLower}m, barrier ${barrierLower}`, 'info');
 
-  // KEY FIX: Use 'HIGHER' and 'LOWER' instead of 'CALL' and 'PUT'
   requestProposalAndBuy('HIGHER', stakeHigher, symbolHigher, durationHigher, barrierHigher);
   requestProposalAndBuy('LOWER',  stakeLower,  symbolLower,  durationLower,  barrierLower);
 }
@@ -750,6 +755,12 @@ function handleMessage(data) {
           ` placed — contract ${b.contract_id}, price ${b.buy_price}`,
           contractType === 'HIGHER' ? 'buy' : 'sell');
 
+      // If no proposals remain, we're past the proposal→buy window.
+      // Clear the watchdog so it doesn't fire during settlement.
+      if (Object.keys(pendingProposals).length === 0) {
+        if (buyWatchdog) { clearTimeout(buyWatchdog); buyWatchdog = null; }
+      }
+
       ws.send(JSON.stringify({
         proposal_open_contract: 1,
         contract_id: b.contract_id,
@@ -789,7 +800,7 @@ function maybeUnlockPair() {
   const openProposals = Object.keys(pendingProposals).length;
   if (openContracts === 0 && openProposals === 0 && pairInFlight) {
     pairInFlight = false;
-    pairWatchdogToken++;
+    if (buyWatchdog) { clearTimeout(buyWatchdog); buyWatchdog = null; }
     updateButtons();
     if (running) {
       log('Pair settled. Firing next pair...', 'cycle');
